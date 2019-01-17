@@ -42,7 +42,7 @@ VOID PhAddDefaultSettings(
     PhpAddIntegerSetting(L"ElevationLevel", L"1"); // PromptElevateAction
     PhpAddIntegerSetting(L"EnableCycleCpuUsage", L"1");
     PhpAddIntegerSetting(L"EnableInstantTooltips", L"0");
-    PhpAddIntegerSetting(L"EnableKph", L"1");
+    PhpAddIntegerSetting(L"EnableKph", L"0");
     PhpAddIntegerSetting(L"EnableKphWarnings", L"1");
     PhpAddIntegerSetting(L"EnableHandleSnapshot", L"1");
     PhpAddIntegerSetting(L"EnableNetworkResolve", L"1");

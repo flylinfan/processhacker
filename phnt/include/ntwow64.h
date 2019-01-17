@@ -167,7 +167,7 @@ typedef struct _LDR_DATA_TABLE_ENTRY32
     ULONG ImplicitPathOptions;
     ULONG ReferenceCount;
     ULONG DependentLoadFlags;
-    UCHAR SigningLevel; // since REDSTONE2
+	UCHAR SigningLevel; // since REDSTONE2
 } LDR_DATA_TABLE_ENTRY32, *PLDR_DATA_TABLE_ENTRY32;
 
 typedef struct _CURDIR32
@@ -548,6 +548,24 @@ C_ASSERT(FIELD_OFFSET(TEB32, MuiImpersonation) == 0xfc4);
 C_ASSERT(FIELD_OFFSET(TEB32, ReservedForCrt) == 0xfe8);
 C_ASSERT(FIELD_OFFSET(TEB32, EffectiveContainerId) == 0xff0);
 C_ASSERT(sizeof(TEB32) == 0x1000);
+
+//
+// Macro to round to the nearest page size
+//
+
+#define WOW64_ROUND_TO_PAGES(Size)  \
+        (((ULONG_PTR)(Size) + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1))
+
+//
+// Get the 32-bit TEB without doing a memory reference.
+//
+
+#define WOW64_GET_TEB32_SAFE(teb64) \
+        ((PTEB32) ((ULONGLONG)teb64 + WOW64_ROUND_TO_PAGES (sizeof (TEB))))
+
+#define WOW64_GET_TEB32(teb64) \
+        WOW64_GET_TEB32_SAFE(teb64)
+
 
 // Conversion
 

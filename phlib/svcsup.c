@@ -512,6 +512,9 @@ NTSTATUS PhGetThreadServiceTag(
     NTSTATUS status;
     THREAD_BASIC_INFORMATION basicInfo;
     BOOLEAN openedProcessHandle = FALSE;
+#ifdef _WIN64
+	BOOLEAN isWow64 = FALSE;
+#endif
 
     if (!NT_SUCCESS(status = PhGetThreadBasicInformation(ThreadHandle, &basicInfo)))
         return status;
@@ -528,13 +531,46 @@ NTSTATUS PhGetThreadServiceTag(
         openedProcessHandle = TRUE;
     }
 
-    status = NtReadVirtualMemory(
-        ProcessHandle,
-        PTR_ADD_OFFSET(basicInfo.TebBaseAddress, FIELD_OFFSET(TEB, SubProcessTag)),
-        ServiceTag,
-        sizeof(PVOID),
-        NULL
-        );
+#ifdef _WIN64
+	PhGetProcessIsWow64(ProcessHandle, &isWow64);
+#endif
+
+#ifdef _WIN64
+
+	if (isWow64)
+	{
+		PTEB32 teb32 = WOW64_GET_TEB32(basicInfo.TebBaseAddress);
+
+		status = NtReadVirtualMemory(
+			ProcessHandle,
+			PTR_ADD_OFFSET(teb32, FIELD_OFFSET(TEB32, SubProcessTag)),
+			ServiceTag,
+			sizeof(WOW64_POINTER(PVOID)),
+			NULL
+		);
+	}
+	else
+	{
+		status = NtReadVirtualMemory(
+			ProcessHandle,
+			PTR_ADD_OFFSET(basicInfo.TebBaseAddress, FIELD_OFFSET(TEB, SubProcessTag)),
+			ServiceTag,
+			sizeof(PVOID),
+			NULL
+		);
+	}
+#else
+	
+	status = NtReadVirtualMemory(
+		ProcessHandle,
+		PTR_ADD_OFFSET(basicInfo.TebBaseAddress, FIELD_OFFSET(TEB, SubProcessTag)),
+		ServiceTag,
+		sizeof(PVOID),
+		NULL
+	);
+
+#endif
+    
 
     if (openedProcessHandle)
         NtClose(ProcessHandle);
