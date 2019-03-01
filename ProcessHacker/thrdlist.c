@@ -113,12 +113,15 @@ VOID PhInitializeThreadList(
     PhAddTreeNewColumn(TreeNewHandle, PH_THREAD_TREELIST_COLUMN_USERTIME, FALSE, L"User time", 100, PH_ALIGN_LEFT, ULONG_MAX, 0);
     PhAddTreeNewColumn(TreeNewHandle, PH_THREAD_TREELIST_COLUMN_IDEALPROCESSOR, FALSE, L"Ideal processor", 80, PH_ALIGN_LEFT, ULONG_MAX, 0);
     PhAddTreeNewColumn(TreeNewHandle, PH_THREAD_TREELIST_COLUMN_CRITICAL, FALSE, L"Critical", 80, PH_ALIGN_LEFT, ULONG_MAX, 0);
+    PhAddTreeNewColumn(TreeNewHandle, PH_THREAD_TREELIST_COLUMN_TIDHEX, FALSE, L"TID (Hex)", 50, PH_ALIGN_RIGHT, 0, DT_RIGHT);
 
     TreeNew_SetRedraw(TreeNewHandle, TRUE);
     TreeNew_SetTriState(TreeNewHandle, TRUE);
     //TreeNew_SetSort(TreeNewHandle, PHTHTLC_CYCLESDELTA, DescendingSortOrder);
 
     PhCmInitializeManager(&Context->Cm, TreeNewHandle, PH_THREAD_TREELIST_COLUMN_MAXIMUM, PhpThreadTreeNewPostSortFunction);
+
+    PhInitializeTreeNewFilterSupport(&Context->TreeFilterSupport, Context->TreeNewHandle, Context->NodeList);
 }
 
 VOID PhDeleteThreadList(
@@ -604,15 +607,12 @@ BOOLEAN NTAPI PhpThreadTreeNewCallback(
                     PH_FORMAT format;
                     SIZE_T returnLength;
 
-                    if (PhEnableHexId)
-                        PhInitFormatIX(&format, HandleToUlong(threadItem->ThreadId));
-                    else
-                        PhInitFormatIU(&format, HandleToUlong(threadItem->ThreadId));
+                    PhInitFormatIU(&format, HandleToUlong(threadItem->ThreadId));
 
                     if (PhFormatToBuffer(&format, 1, node->ThreadIdText, sizeof(node->ThreadIdText), &returnLength))
                     {
                         getCellText->Text.Buffer = node->ThreadIdText;
-                        getCellText->Text.Length = returnLength - sizeof(WCHAR); // minus null terminator
+                        getCellText->Text.Length = returnLength - sizeof(UNICODE_NULL); // minus null terminator
                     }
                 }
                 break;
@@ -632,7 +632,7 @@ BOOLEAN NTAPI PhpThreadTreeNewCallback(
                         if (PhFormatToBuffer(&format, 1, node->CpuUsageText, sizeof(node->CpuUsageText), &returnLength))
                         {
                             getCellText->Text.Buffer = node->CpuUsageText;
-                            getCellText->Text.Length = returnLength - sizeof(WCHAR); // minus null terminator
+                            getCellText->Text.Length = returnLength - sizeof(UNICODE_NULL);
                         }
                     }
                     else if (cpuUsage != 0 && PhCsShowCpuBelow001)
@@ -646,7 +646,7 @@ BOOLEAN NTAPI PhpThreadTreeNewCallback(
                         if (PhFormatToBuffer(format, 2, node->CpuUsageText, sizeof(node->CpuUsageText), &returnLength))
                         {
                             getCellText->Text.Buffer = node->CpuUsageText;
-                            getCellText->Text.Length = returnLength - sizeof(WCHAR);
+                            getCellText->Text.Length = returnLength - sizeof(UNICODE_NULL);
                         }
                     }
                 }
@@ -883,6 +883,20 @@ BOOLEAN NTAPI PhpThreadTreeNewCallback(
                             if (breakOnTermination)
                                 PhInitializeStringRef(&getCellText->Text, L"Critical");
                         }
+                    }
+                }
+                break;
+            case PH_THREAD_TREELIST_COLUMN_TIDHEX:
+                {
+                    PH_FORMAT format;
+                    SIZE_T returnLength;
+
+                    PhInitFormatIX(&format, HandleToUlong(threadItem->ThreadId));
+
+                    if (PhFormatToBuffer(&format, 1, node->ThreadIdHexText, sizeof(node->ThreadIdHexText), &returnLength))
+                    {
+                        getCellText->Text.Buffer = node->ThreadIdHexText;
+                        getCellText->Text.Length = returnLength - sizeof(UNICODE_NULL);
                     }
                 }
                 break;

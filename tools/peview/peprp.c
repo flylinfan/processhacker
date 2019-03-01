@@ -47,7 +47,7 @@ PIMAGE_COR20_HEADER PvImageCor20Header = NULL;
 PPH_SYMBOL_PROVIDER PvSymbolProvider = NULL;
 HICON PvImageSmallIcon = NULL;
 HICON PvImageLargeIcon = NULL;
-static PH_IMAGE_VERSION_INFO PvImageVersionInfo;
+PH_IMAGE_VERSION_INFO PvImageVersionInfo;
 static VERIFY_RESULT PvImageVerifyResult;
 static PPH_STRING PvImageSignerName;
 
@@ -69,12 +69,25 @@ VOID PvPeProperties(
     {
         // Load current PE pdb
         // TODO: Move into seperate thread.
-        PhLoadModuleSymbolProvider(
-            PvSymbolProvider,
-            PvFileName->Buffer,
-            (ULONG64)PvMappedImage.NtHeaders->OptionalHeader.ImageBase,
-            PvMappedImage.NtHeaders->OptionalHeader.SizeOfImage
-            );
+
+        if (PvMappedImage.Magic == IMAGE_NT_OPTIONAL_HDR32_MAGIC)
+        {
+            PhLoadModuleSymbolProvider(
+                PvSymbolProvider,
+                PvFileName->Buffer,
+                (ULONG64)PvMappedImage.NtHeaders32->OptionalHeader.ImageBase,
+                PvMappedImage.NtHeaders32->OptionalHeader.SizeOfImage
+                );
+        }
+        else
+        {
+            PhLoadModuleSymbolProvider(
+                PvSymbolProvider,
+                PvFileName->Buffer,
+                (ULONG64)PvMappedImage.NtHeaders->OptionalHeader.ImageBase,
+                PvMappedImage.NtHeaders->OptionalHeader.SizeOfImage
+                );
+        }
     }
 
     if (propContext = PvCreatePropContext(PvFileName))
@@ -218,6 +231,27 @@ VOID PvPeProperties(
             PvAddPropPage(propContext, newPage);
         }
 
+        // Processes page
+        {
+            newPage = PvCreatePropPageContext(
+                MAKEINTRESOURCE(IDD_PIDS),
+                PvpPeProcessesDlgProc,
+                NULL
+                );
+            PvAddPropPage(propContext, newPage);
+        }
+
+        // TLS page
+        if (NT_SUCCESS(PhGetMappedImageDataEntry(&PvMappedImage, IMAGE_DIRECTORY_ENTRY_TLS, &entry)) && entry->VirtualAddress)
+        {
+            newPage = PvCreatePropPageContext(
+                MAKEINTRESOURCE(IDD_TLS),
+                PvpPeTlsDlgProc,
+                NULL
+                );
+            PvAddPropPage(propContext, newPage);
+        }
+
         // Symbols page
         if (NT_SUCCESS(PhGetMappedImageDataEntry(&PvMappedImage, IMAGE_DIRECTORY_ENTRY_DEBUG, &entry)) && entry->VirtualAddress)
         {
@@ -339,16 +373,6 @@ static NTSTATUS VerifyImageThreadStart(
     PostMessage(windowHandle, PVM_VERIFY_DONE, 0, 0);
 
     return STATUS_SUCCESS;
-}
-
-FORCEINLINE PWSTR PvpGetStringOrNa(
-    _In_ PPH_STRING String
-    )
-{
-    if (!PhIsNullOrEmptyString(String))
-        return String->Buffer;
-    else
-        return L"N/A";
 }
 
 FORCEINLINE PPH_STRING PvpGetSectionCharacteristics(

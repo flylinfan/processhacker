@@ -2,7 +2,7 @@
  * Process Hacker -
  *   PE viewer
  *
- * Copyright (C) 2017 dmex
+ * Copyright (C) 2019 dmex
  *
  * This file is part of Process Hacker.
  *
@@ -22,39 +22,66 @@
 
 #include <peview.h>
 
-VOID PvpProcessElfImports(
+VOID PvpPeEnumerateProcessIds(
     _In_ HWND ListViewHandle
     )
 {
-    PPH_LIST imports;
-    ULONG count = 0;
+    HANDLE fileHandle;
 
-    PhGetMappedWslImageSymbols(&PvMappedImage, &imports);
-
-    for (ULONG i = 0; i < imports->Count; i++)
+    if (NT_SUCCESS(PhCreateFileWin32(
+        &fileHandle,
+        PhGetString(PvFileName),
+        FILE_READ_ATTRIBUTES | SYNCHRONIZE,
+        FILE_ATTRIBUTE_NORMAL,
+        FILE_SHARE_READ,
+        FILE_OPEN,
+        FILE_NON_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT
+        )))
     {
-        PPH_ELF_IMAGE_SYMBOL_ENTRY import = imports->Items[i];
-        INT lvItemIndex;
-        WCHAR number[PH_INT32_STR_LEN_1];
+        PFILE_PROCESS_IDS_USING_FILE_INFORMATION processIds;
+        ULONG count = 0;
+        ULONG i;
 
-        if (!import->ImportSymbol)
-            continue;
+        if (NT_SUCCESS(PhGetProcessIdsUsingFile(
+            fileHandle,
+            &processIds
+            )))
+        {
+            for (i = 0; i < processIds->NumberOfProcessIdsInList; i++)
+            {
+                INT lvItemIndex;
+                HANDLE processId;
+                PPH_STRING fileName = NULL;
+                WCHAR number[PH_INT32_STR_LEN_1];
 
-        PhPrintUInt64(number, ++count);
-        lvItemIndex = PhAddListViewItem(ListViewHandle, MAXINT, number, NULL);
+                processId = (HANDLE)processIds->ProcessIdList[i];
 
-        PhSetListViewSubItem(ListViewHandle, lvItemIndex, 1, import->Module);
-        PhSetListViewSubItem(ListViewHandle, lvItemIndex, 2, import->Name);
-        PhSetListViewSubItem(ListViewHandle, lvItemIndex, 3, PvpGetSymbolTypeName(import->TypeInfo));
-        PhSetListViewSubItem(ListViewHandle, lvItemIndex, 4, PvpGetSymbolBindingName(import->TypeInfo));
-        PhSetListViewSubItem(ListViewHandle, lvItemIndex, 5, PvpGetSymbolVisibility(import->OtherInfo));
-        PhSetListViewSubItem(ListViewHandle, lvItemIndex, 6, PvpGetSymbolSectionName(import->SectionIndex)->Buffer);
+                if (processId == SYSTEM_PROCESS_ID)
+                    fileName = PhGetKernelFileName();
+                else
+                    PhGetProcessImageFileNameByProcessId(processId, &fileName);
+
+                if (fileName)
+                    PhMoveReference(&fileName, PhGetFileName(fileName));
+
+                PhPrintUInt32(number, ++count);
+                lvItemIndex = PhAddListViewItem(ListViewHandle, MAXINT, number, NULL);
+
+                PhPrintUInt32(number, HandleToUlong(processId));
+                PhSetListViewSubItem(ListViewHandle, lvItemIndex, 1, number);
+
+                PhSetListViewSubItem(ListViewHandle, lvItemIndex, 2, fileName->Buffer);
+                PhDereferenceObject(fileName);
+            }
+
+            PhFree(processIds);
+        }
+
+        NtClose(fileHandle);
     }
-
-    PhFreeMappedWslImageSymbols(imports);
 }
 
-INT_PTR CALLBACK PvpExlfImportsDlgProc(
+INT_PTR CALLBACK PvpPeProcessesDlgProc(
     _In_ HWND hwndDlg,
     _In_ UINT uMsg,
     _In_ WPARAM wParam,
@@ -77,24 +104,20 @@ INT_PTR CALLBACK PvpExlfImportsDlgProc(
             PhSetListViewStyle(lvHandle, TRUE, TRUE);
             PhSetControlTheme(lvHandle, L"explorer");
             PhAddListViewColumn(lvHandle, 0, 0, 0, LVCFMT_LEFT, 40, L"#");
-            PhAddListViewColumn(lvHandle, 1, 1, 1, LVCFMT_LEFT, 130, L"Module");
-            PhAddListViewColumn(lvHandle, 2, 2, 2, LVCFMT_LEFT, 210, L"Name");
-            PhAddListViewColumn(lvHandle, 3, 3, 3, LVCFMT_LEFT, 100, L"Type");
-            PhAddListViewColumn(lvHandle, 4, 4, 4, LVCFMT_LEFT, 80, L"Binding");
-            PhAddListViewColumn(lvHandle, 5, 5, 5, LVCFMT_LEFT, 80, L"Visibility");
-            PhAddListViewColumn(lvHandle, 6, 6, 6, LVCFMT_LEFT, 80, L"Section");
+            PhAddListViewColumn(lvHandle, 1, 1, 1, LVCFMT_LEFT, 150, L"PID");
+            PhAddListViewColumn(lvHandle, 2, 2, 2, LVCFMT_LEFT, 150, L"Name");
             PhSetExtendedListView(lvHandle);
-            PhLoadListViewColumnsFromSetting(L"ImportsWslListViewColumns", lvHandle);
+            PhLoadListViewColumnsFromSetting(L"ImagePidsListViewColumns", lvHandle);
 
-            PvpProcessElfImports(lvHandle);
-            ExtendedListView_SortItems(lvHandle);
-
+            PvpPeEnumerateProcessIds(lvHandle);
+            //ExtendedListView_SortItems(lvHandle);
+            
             EnableThemeDialogTexture(hwndDlg, ETDT_ENABLETAB);
         }
         break;
     case WM_DESTROY:
         {
-            PhSaveListViewColumnsToSetting(L"ImportsWslListViewColumns", GetDlgItem(hwndDlg, IDC_LIST));
+            PhSaveListViewColumnsToSetting(L"ImagePidsListViewColumns", GetDlgItem(hwndDlg, IDC_LIST));
         }
         break;
     case WM_SHOWWINDOW:
@@ -115,11 +138,6 @@ INT_PTR CALLBACK PvpExlfImportsDlgProc(
     case WM_NOTIFY:
         {
             PvHandleListViewNotifyForCopy(lParam, GetDlgItem(hwndDlg, IDC_LIST));
-        }
-        break;
-    case WM_CONTEXTMENU:
-        {
-            PvHandleListViewCommandCopy(hwndDlg, lParam, wParam, GetDlgItem(hwndDlg, IDC_LIST));
         }
         break;
     }

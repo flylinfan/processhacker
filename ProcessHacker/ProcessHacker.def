@@ -651,7 +651,13 @@ EXPORTS
 
 ; mxml
     mxmlDelete
+    mxmlElementGetAttrCount
+    mxmlElementGetAttrByIndex
     mxmlElementSetAttr
+    mxmlGetFirstChild
+    mxmlGetNextSibling
+    mxmlGetOpaque
+    mxmlGetType
     mxmlLoadFd
     mxmlNewOpaque
     mxmlNewElement
@@ -679,3 +685,6 @@ EXPORTS
 ; cache
     PhCreateCacheFile
     PhDeleteCacheFile
+
+; appresolver
+    PhAppResolverGetAppIdForWindow

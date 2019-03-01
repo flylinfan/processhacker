@@ -606,43 +606,34 @@ VOID PhMwpOnCommand(
         break;
     case ID_HACKER_RUN:
         {
-            if (RunFileDlg)
-            {
-                SelectedRunAsMode = 0;
-                RunFileDlg(PhMainWndHandle, NULL, NULL, NULL, NULL, RFF_OPTRUNAS);
-            }
+            SelectedRunAsMode = 0;
+            PhShowRunFileDialog(PhMainWndHandle, NULL, NULL, NULL, NULL, RFF_OPTRUNAS);
         }
         break;
     case ID_HACKER_RUNASADMINISTRATOR:
         {
-            if (RunFileDlg)
-            {
-                SelectedRunAsMode = RUNAS_MODE_ADMIN;
-                RunFileDlg(
-                    PhMainWndHandle,
-                    NULL,
-                    NULL,
-                    NULL,
-                    L"Type the name of a program that will be opened under alternate credentials.",
-                    0
-                    );
-            }
+            SelectedRunAsMode = RUNAS_MODE_ADMIN;
+            PhShowRunFileDialog(
+                PhMainWndHandle,
+                NULL,
+                NULL,
+                NULL,
+                L"Type the name of a program that will be opened under alternate credentials.",
+                0
+                );
         }
         break;
     case ID_HACKER_RUNASLIMITEDUSER:
         {
-            if (RunFileDlg)
-            {
-                SelectedRunAsMode = RUNAS_MODE_LIMITED;
-                RunFileDlg(
-                    PhMainWndHandle,
-                    NULL,
-                    NULL,
-                    NULL,
-                    L"Type the name of a program that will be opened under standard user privileges.",
-                    0
-                    );
-            }
+            SelectedRunAsMode = RUNAS_MODE_LIMITED;
+            PhShowRunFileDialog(
+                PhMainWndHandle,
+                NULL,
+                NULL,
+                NULL,
+                L"Type the name of a program that will be opened under standard user privileges.",
+                0
+                );
         }
         break;
     case ID_HACKER_RUNAS:
@@ -1721,7 +1712,7 @@ VOID PhMwpOnSize(
     VOID
     )
 {
-    if (!IsIconic(PhMainWndHandle))
+    if (!IsMinimized(PhMainWndHandle))
     {
         HDWP deferHandle;
 
@@ -1879,7 +1870,7 @@ BOOLEAN PhMwpOnNotify(
                         PPH_STRING filePathString;
 
                         // The user typed a name without a path so attempt to locate the executable.
-                        if (PhSearchFilePath(fileName->Buffer, L".exe", &filePathString))
+                        if (filePathString = PhSearchFilePath(fileName->Buffer, L".exe"))
                             PhMoveReference(&fileName, filePathString);
                         else
                             PhClearReference(&fileName);
@@ -1965,7 +1956,7 @@ ULONG_PTR PhMwpOnUserMessage(
                     ShowWindow(PhMainWndHandle, SW_SHOW);
                 }
 
-                if (IsIconic(PhMainWndHandle))
+                if (IsMinimized(PhMainWndHandle))
                 {
                     ShowWindow(PhMainWndHandle, SW_RESTORE);
                 }
@@ -2207,7 +2198,6 @@ VOID PhMwpLoadSettings(
     PhEnableServiceQueryStage2 = !!PhGetIntegerSetting(L"EnableServiceStage2");
     PhEnableThemeSupport = !!PhGetIntegerSetting(L"EnableThemeSupport");
     PhEnableTooltipSupport = !!PhGetIntegerSetting(L"EnableTooltipSupport");
-    PhEnableHexId = !!PhGetIntegerSetting(L"ShowHexId");
     PhMwpNotifyIconNotifyMask = PhGetIntegerSetting(L"IconNotifyMask");
     
     if (PhGetIntegerSetting(L"MainWindowAlwaysOnTop"))
@@ -2361,7 +2351,7 @@ VOID PhMwpActivateWindow(
     _In_ BOOLEAN Toggle
     )
 {
-    if (IsIconic(PhMainWndHandle))
+    if (IsMinimized(PhMainWndHandle))
     {
         ShowWindow(PhMainWndHandle, SW_RESTORE);
         SetForegroundWindow(PhMainWndHandle);

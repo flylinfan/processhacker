@@ -246,7 +246,7 @@ PPH_STRING GetCurrentWinStaName(
         GetProcessWindowStation(),
         UOI_NAME,
         string->Buffer,
-        (ULONG)string->Length + 2,
+        (ULONG)string->Length + sizeof(UNICODE_NULL),
         NULL
         ))
     {
@@ -855,8 +855,8 @@ INT_PTR CALLBACK PhpRunAsDlgProc(
 
                 if (SendMessage(context->ProgramComboBoxWindowHandle, CB_GETCOMBOBOXINFO, 0, (LPARAM)&info))
                 {
-                    if (SHAutoComplete_I)
-                        SHAutoComplete_I(info.hwndItem, SHACF_DEFAULT);
+                    if (SHAutoComplete)
+                        SHAutoComplete(info.hwndItem, SHACF_DEFAULT);
                 }
             }
 
@@ -1098,8 +1098,8 @@ INT_PTR CALLBACK PhpRunAsDlgProc(
                             createInfo.Password = PhGetStringOrEmpty(password);
 
                             // Whenever we can, try not to set the desktop name; it breaks a lot of things.
-                            if (desktopName->Length != 0 && !PhEqualString2(desktopName, L"WinSta0\\Default", TRUE))
-                                createInfo.DesktopName = desktopName->Buffer;
+                            if (!PhIsNullOrEmptyString(desktopName) && !PhEqualString2(desktopName, L"WinSta0\\Default", TRUE))
+                                createInfo.DesktopName = PhGetString(desktopName);
 
                             PhSetDesktopWinStaAccess();
 

@@ -226,6 +226,7 @@
     <ClCompile Include="treenew.c" />
     <ClCompile Include="verify.c" />
     <ClCompile Include="workqueue.c" />
+    <ClCompile Include="wslsup.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\apiimport.h" />
@@ -274,6 +275,7 @@
     <ClInclude Include="include\hexeditp.h" />
     <ClInclude Include="include\filestreamp.h" />
     <ClInclude Include="include\kphuser.h" />
+    <ClInclude Include="include\wslsup.h" />
     <ClInclude Include="jsonc\arraylist.h" />
     <ClInclude Include="jsonc\bits.h" />
     <ClInclude Include="jsonc\config.h" />

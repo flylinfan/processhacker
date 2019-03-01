@@ -1408,7 +1408,7 @@ VOID
 NTAPI
 RtlInitEmptyUnicodeString(
     _Out_ PUNICODE_STRING DestinationString,
-    _In_ PWCHAR Buffer,
+    _In_opt_ PWCHAR Buffer,
     _In_ USHORT MaximumLength
     )
 {
@@ -1424,7 +1424,7 @@ FORCEINLINE VOID RtlInitUnicodeString(
     )
 {
     if (SourceString)
-        DestinationString->MaximumLength = (DestinationString->Length = (USHORT)(wcslen(SourceString) * sizeof(WCHAR))) + sizeof(WCHAR);
+        DestinationString->MaximumLength = (DestinationString->Length = (USHORT)(wcslen(SourceString) * sizeof(WCHAR))) + sizeof(UNICODE_NULL);
     else
         DestinationString->MaximumLength = DestinationString->Length = 0;
 
@@ -2638,6 +2638,17 @@ RtlCreateUserProcess(
     _Out_ PRTL_USER_PROCESS_INFORMATION ProcessInformation
     );
 
+NTSYSAPI
+NTSTATUS
+NTAPI
+RtlCreateUserProcessEx(
+    _In_ PUNICODE_STRING NtImagePathName,
+    _In_ PRTL_USER_PROCESS_PARAMETERS ProcessParameters,
+    _In_ BOOLEAN InheritHandles,
+    _Reserved_ ULONG Flags,
+    _Out_ PRTL_USER_PROCESS_INFORMATION ProcessInformation
+    );
+
 #if (PHNT_VERSION >= PHNT_VISTA)
 DECLSPEC_NORETURN
 NTSYSAPI
@@ -3386,6 +3397,13 @@ RTL_PATH_TYPE
 NTAPI
 RtlDetermineDosPathNameType_U(
     _In_ PWSTR DosFileName
+    );
+
+NTSYSAPI
+RTL_PATH_TYPE
+NTAPI
+RtlDetermineDosPathNameType_Ustr(
+    _In_ PCUNICODE_STRING DosFileName
     );
 
 NTSYSAPI

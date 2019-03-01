@@ -494,6 +494,13 @@ PhSetFileSize(
 PHLIBAPI
 NTSTATUS
 NTAPI
+PhDeleteFile(
+    _In_ HANDLE FileHandle
+    );
+
+PHLIBAPI
+NTSTATUS
+NTAPI
 PhGetFileHandleName(
     _In_ HANDLE FileHandle,
     _Out_ PPH_STRING *FileName
@@ -1169,6 +1176,7 @@ PhQueryValueKey(
     );
 
 typedef BOOLEAN (NTAPI *PPH_ENUM_KEY_CALLBACK)(
+    _In_ HANDLE RootDirectory,
     _In_ PKEY_BASIC_INFORMATION Information,
     _In_opt_ PVOID Context
     );
@@ -1243,6 +1251,14 @@ PhQueryFullAttributesFileWin32(
 PHLIBAPI
 NTSTATUS
 NTAPI
+PhQueryAttributesFileWin32(
+    _In_ PWSTR FileName,
+    _Out_ PFILE_BASIC_INFORMATION FileInformation
+    );
+
+PHLIBAPI
+NTSTATUS
+NTAPI
 PhDeleteFileWin32(
     _In_ PWSTR FileName
     );
@@ -1267,6 +1283,16 @@ NTAPI
 PhCreatePipe(
     _Out_ PHANDLE PipeReadHandle,
     _Out_ PHANDLE PipeWriteHandle
+    );
+
+PHLIBAPI
+NTSTATUS
+NTAPI
+PhCreatePipeEx(
+    _Out_ PHANDLE PipeReadHandle,
+    _Out_ PHANDLE PipeWriteHandle,
+    _In_ BOOLEAN InheritHandles,
+    _In_opt_ PSECURITY_DESCRIPTOR SecurityDescriptor
     );
 
 PHLIBAPI

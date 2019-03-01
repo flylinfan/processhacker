@@ -140,7 +140,7 @@ static NTSTATUS PhpEditSecurityInformationThread(
  * \param Context A user-defined value to pass to the callback functions.
  */
 VOID PhEditSecurity(
-    _In_ HWND WindowHandle,
+    _In_opt_ HWND WindowHandle,
     _In_ PWSTR ObjectName,
     _In_ PWSTR ObjectType,
     _In_ PPH_OPEN_OBJECT OpenObject,
@@ -495,10 +495,12 @@ HRESULT STDMETHODCALLTYPE PhSecurityInformation2_LookupSids(
     _Out_ LPDATAOBJECT *ppdo
     )
 {
+    PhSecurityInformation2 *this = (PhSecurityInformation2 *)This;
     PhSecurityIDataObject *dataObject;
 
     dataObject = PhAllocateZero(sizeof(PhSecurityInformation));
     dataObject->VTable = &PhDataObject_VTable;
+    dataObject->Context = this->Context;
     dataObject->RefCount = 1;
 
     dataObject->SidCount = cSids;
@@ -567,7 +569,10 @@ BOOL STDMETHODCALLTYPE PhSecurityInformation3_GetFullResourceName(
 {
     PhSecurityInformation3 *this = (PhSecurityInformation3 *)This;
 
-    *ppszResourceName = PhGetString(this->Context->ObjectName);
+    if (PhIsNullOrEmptyString(this->Context->ObjectName))
+        *ppszResourceName = PhGetString(this->Context->ObjectType);
+    else
+        *ppszResourceName = PhGetString(this->Context->ObjectName);
 
     return TRUE;
 }
@@ -626,8 +631,7 @@ ULONG STDMETHODCALLTYPE PhSecurityDataObject_Release(
 
     if (this->RefCount == 0)
     {
-        for (ULONG i = 0; i < this->NameCache->Count; i++)
-            PhDereferenceObject(this->NameCache->Items[i]);
+        PhDereferenceObjects(this->NameCache->Items, this->NameCache->Count);
         PhDereferenceObject(this->NameCache);
 
         PhFree(this);
@@ -657,7 +661,6 @@ HRESULT STDMETHODCALLTYPE PhSecurityDataObject_GetData(
         SID_NAME_USE sidNameUse;
 
         memset(&sidInfo, 0, sizeof(SID_INFO));
-
         sidInfo.pSid = this->Sids[i];
 
         if (sidString = PhGetSidFullName(sidInfo.pSid, FALSE, &sidNameUse))
@@ -689,6 +692,12 @@ HRESULT STDMETHODCALLTYPE PhSecurityDataObject_GetData(
         else if (sidString = PhGetAppContainerName(sidInfo.pSid))
         {
             PhMoveReference(&sidString, PhFormatString(L"%s (APP_CONTAINER)", PhGetString(sidString)));
+            sidInfo.pwzCommonName = PhGetString(sidString);
+            PhAddItemList(this->NameCache, sidString);
+        }
+        else if (sidString = PhGetCapabilitySidName(sidInfo.pSid))
+        {
+            PhMoveReference(&sidString, PhFormatString(L"%s (APP_CAPABILITY)", PhGetString(sidString)));
             sidInfo.pwzCommonName = PhGetString(sidString);
             PhAddItemList(this->NameCache, sidString);
         }

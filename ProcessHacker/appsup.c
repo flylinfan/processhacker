@@ -941,7 +941,7 @@ VOID PhCopyListViewInfoTip(
         Tip->Buffer,
         copyLength * 2
         );
-    GetInfoTip->pszText[copyIndex + copyLength] = 0;
+    GetInfoTip->pszText[copyIndex + copyLength] = UNICODE_NULL;
 }
 
 VOID PhCopyListView(
@@ -1100,7 +1100,6 @@ VOID PhWritePhTextHeader(
     PPH_STRING version;
     LARGE_INTEGER time;
     SYSTEMTIME systemTime;
-    PPH_STRING dateString;
     PPH_STRING timeString;
 
     PhWriteStringAsUtf8FileStream2(FileStream, L"Process Hacker ");
@@ -1125,10 +1124,8 @@ VOID PhWritePhTextHeader(
     PhQuerySystemTime(&time);
     PhLargeIntegerToLocalSystemTime(&systemTime, &time);
 
-    dateString = PhFormatDate(&systemTime, NULL);
-    timeString = PhFormatTime(&systemTime, NULL);
-    PhWriteStringFormatAsUtf8FileStream(FileStream, L"\r\n%s %s\r\n\r\n", dateString->Buffer, timeString->Buffer);
-    PhDereferenceObject(dateString);
+    timeString = PhFormatDateTime(&systemTime);
+    PhWriteStringFormatAsUtf8FileStream(FileStream, L"\r\n%s\r\n\r\n", timeString->Buffer);
     PhDereferenceObject(timeString);
 }
 
@@ -1317,15 +1314,9 @@ BOOLEAN PhCreateProcessIgnoreIfeoDebugger(
     )
 {
     BOOLEAN result;
-    BOOL (NTAPI *debugSetProcessKillOnExit)(BOOL);
-    BOOL (NTAPI *debugActiveProcessStop)(ULONG);
     BOOLEAN originalValue;
     STARTUPINFO startupInfo;
     PROCESS_INFORMATION processInfo;
-
-    if (!(debugSetProcessKillOnExit = PhGetDllProcedureAddress(L"kernel32.dll", "DebugSetProcessKillOnExit", 0)) ||
-        !(debugActiveProcessStop = PhGetDllProcedureAddress(L"kernel32.dll", "DebugActiveProcessStop", 0)))
-        return FALSE;
 
     result = FALSE;
 
@@ -1342,9 +1333,31 @@ BOOLEAN PhCreateProcessIgnoreIfeoDebugger(
     // allows us to skip the Debugger IFEO value.
     if (CreateProcess(FileName, NULL, NULL, NULL, FALSE, DEBUG_PROCESS | DEBUG_ONLY_THIS_PROCESS, NULL, NULL, &startupInfo, &processInfo))
     {
-        // Stop debugging the process now.
-        debugSetProcessKillOnExit(FALSE);
-        debugActiveProcessStop(processInfo.dwProcessId);
+        HANDLE debugObjectHandle;
+
+        if (NT_SUCCESS(PhGetProcessDebugObject(
+            processInfo.hProcess,
+            &debugObjectHandle
+            )))
+        {
+            ULONG killProcessOnExit;
+
+            // Disable kill-on-close.
+            killProcessOnExit = 0;
+            NtSetInformationDebugObject(
+                debugObjectHandle,
+                DebugObjectKillProcessOnExitInformation,
+                &killProcessOnExit,
+                sizeof(ULONG),
+                NULL
+                );
+
+            // Stop debugging the process now.
+            NtRemoveProcessDebug(processInfo.hProcess, debugObjectHandle);
+
+            NtClose(debugObjectHandle);
+        }
+
         result = TRUE;
     }
 
@@ -1956,11 +1969,11 @@ BOOLEAN PhpSelectFavoriteInRegedit(
     for (i = 3; i < count; i++)
     {
         MENUITEMINFO info = { sizeof(MENUITEMINFO) };
-        WCHAR buffer[32];
+        WCHAR buffer[MAX_PATH];
 
         info.fMask = MIIM_ID | MIIM_STRING;
         info.dwTypeData = buffer;
-        info.cch = sizeof(buffer) / sizeof(WCHAR);
+        info.cch = RTL_NUMBER_OF(buffer);
         GetMenuItemInfo(favoritesMenu, i, TRUE, &info);
 
         if (info.cch == FavoriteName->Length / sizeof(WCHAR))
@@ -1994,7 +2007,7 @@ BOOLEAN PhpSelectFavoriteInRegedit(
         PostMessage(RegeditWindow, WM_MENUSELECT, MAKEWPARAM(0, 0xffff), 0);
 
     // Bring regedit to the top.
-    if (IsIconic(RegeditWindow))
+    if (IsMinimized(RegeditWindow))
     {
         ShowWindow(RegeditWindow, SW_RESTORE);
         SetForegroundWindow(RegeditWindow);
@@ -2062,7 +2075,7 @@ BOOLEAN PhShellOpenKey2(
     PhUnicodeStringToStringRef(&valueName, &valueNameSr);
 
     expandedKeyName = PhExpandKeyName(KeyName, TRUE);
-    NtSetValueKey(favoritesKeyHandle, &valueName, 0, REG_SZ, expandedKeyName->Buffer, (ULONG)expandedKeyName->Length + 2);
+    NtSetValueKey(favoritesKeyHandle, &valueName, 0, REG_SZ, expandedKeyName->Buffer, (ULONG)expandedKeyName->Length + sizeof(UNICODE_NULL));
     PhDereferenceObject(expandedKeyName);
 
     // Select our entry in regedit.
@@ -2129,3 +2142,4 @@ HBITMAP PhGetShieldBitmap(
 
     return shieldBitmap;
 }
+

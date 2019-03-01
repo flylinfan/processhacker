@@ -2,7 +2,7 @@
  * Process Hacker -
  *   PE viewer
  *
- * Copyright (C) 2017 dmex
+ * Copyright (C) 2019 dmex
  *
  * This file is part of Process Hacker.
  *
@@ -22,39 +22,56 @@
 
 #include <peview.h>
 
-VOID PvpProcessElfImports(
+VOID PvpPeEnumerateTlsCallbacks(
     _In_ HWND ListViewHandle
     )
 {
-    PPH_LIST imports;
+    PH_MAPPED_IMAGE_TLS_CALLBACKS callbacks;
+    PH_IMAGE_TLS_CALLBACK_ENTRY entry;
     ULONG count = 0;
+    ULONG i;
 
-    PhGetMappedWslImageSymbols(&PvMappedImage, &imports);
-
-    for (ULONG i = 0; i < imports->Count; i++)
+    if (NT_SUCCESS(PhGetMappedImageTlsCallbacks(&callbacks, &PvMappedImage)))
     {
-        PPH_ELF_IMAGE_SYMBOL_ENTRY import = imports->Items[i];
-        INT lvItemIndex;
-        WCHAR number[PH_INT32_STR_LEN_1];
+        for (i = 0; i < callbacks.NumberOfEntries; i++)
+        {
+            INT lvItemIndex;
+            PPH_STRING symbol;
+            PPH_STRING symbolName = NULL;
+            WCHAR number[PH_INT32_STR_LEN_1];
+            WCHAR pointer[PH_PTR_STR_LEN_1];
 
-        if (!import->ImportSymbol)
-            continue;
+            entry = callbacks.Entries[i];
 
-        PhPrintUInt64(number, ++count);
-        lvItemIndex = PhAddListViewItem(ListViewHandle, MAXINT, number, NULL);
+            PhPrintUInt32(number, ++count);
+            lvItemIndex = PhAddListViewItem(ListViewHandle, MAXINT, number, NULL);
 
-        PhSetListViewSubItem(ListViewHandle, lvItemIndex, 1, import->Module);
-        PhSetListViewSubItem(ListViewHandle, lvItemIndex, 2, import->Name);
-        PhSetListViewSubItem(ListViewHandle, lvItemIndex, 3, PvpGetSymbolTypeName(import->TypeInfo));
-        PhSetListViewSubItem(ListViewHandle, lvItemIndex, 4, PvpGetSymbolBindingName(import->TypeInfo));
-        PhSetListViewSubItem(ListViewHandle, lvItemIndex, 5, PvpGetSymbolVisibility(import->OtherInfo));
-        PhSetListViewSubItem(ListViewHandle, lvItemIndex, 6, PvpGetSymbolSectionName(import->SectionIndex)->Buffer);
+            PhPrintPointer(pointer, (PVOID)(ULONG_PTR)entry.Address);
+            PhSetListViewSubItem(ListViewHandle, lvItemIndex, 1, pointer);
+
+            symbol = PhGetSymbolFromAddress(
+                PvSymbolProvider,
+                (ULONG64)entry.Address,
+                NULL,
+                NULL,
+                &symbolName,
+                NULL
+                );
+
+            if (symbolName)
+            {
+                PhSetListViewSubItem(ListViewHandle, lvItemIndex, 2, symbolName->Buffer);
+                PhDereferenceObject(symbolName);
+            }
+
+            if (symbol) PhDereferenceObject(symbol);
+        }
+
+        PhFree(callbacks.Entries);
     }
-
-    PhFreeMappedWslImageSymbols(imports);
 }
 
-INT_PTR CALLBACK PvpExlfImportsDlgProc(
+INT_PTR CALLBACK PvpPeTlsDlgProc(
     _In_ HWND hwndDlg,
     _In_ UINT uMsg,
     _In_ WPARAM wParam,
@@ -77,24 +94,20 @@ INT_PTR CALLBACK PvpExlfImportsDlgProc(
             PhSetListViewStyle(lvHandle, TRUE, TRUE);
             PhSetControlTheme(lvHandle, L"explorer");
             PhAddListViewColumn(lvHandle, 0, 0, 0, LVCFMT_LEFT, 40, L"#");
-            PhAddListViewColumn(lvHandle, 1, 1, 1, LVCFMT_LEFT, 130, L"Module");
-            PhAddListViewColumn(lvHandle, 2, 2, 2, LVCFMT_LEFT, 210, L"Name");
-            PhAddListViewColumn(lvHandle, 3, 3, 3, LVCFMT_LEFT, 100, L"Type");
-            PhAddListViewColumn(lvHandle, 4, 4, 4, LVCFMT_LEFT, 80, L"Binding");
-            PhAddListViewColumn(lvHandle, 5, 5, 5, LVCFMT_LEFT, 80, L"Visibility");
-            PhAddListViewColumn(lvHandle, 6, 6, 6, LVCFMT_LEFT, 80, L"Section");
+            PhAddListViewColumn(lvHandle, 1, 1, 1, LVCFMT_LEFT, 150, L"RVA");
+            PhAddListViewColumn(lvHandle, 2, 2, 2, LVCFMT_LEFT, 200, L"Symbol");
             PhSetExtendedListView(lvHandle);
-            PhLoadListViewColumnsFromSetting(L"ImportsWslListViewColumns", lvHandle);
+            PhLoadListViewColumnsFromSetting(L"ImageTlsListViewColumns", lvHandle);
 
-            PvpProcessElfImports(lvHandle);
-            ExtendedListView_SortItems(lvHandle);
-
+            PvpPeEnumerateTlsCallbacks(lvHandle);
+            //ExtendedListView_SortItems(lvHandle);
+            
             EnableThemeDialogTexture(hwndDlg, ETDT_ENABLETAB);
         }
         break;
     case WM_DESTROY:
         {
-            PhSaveListViewColumnsToSetting(L"ImportsWslListViewColumns", GetDlgItem(hwndDlg, IDC_LIST));
+            PhSaveListViewColumnsToSetting(L"ImageTlsListViewColumns", GetDlgItem(hwndDlg, IDC_LIST));
         }
         break;
     case WM_SHOWWINDOW:

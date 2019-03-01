@@ -97,15 +97,18 @@ VOID ToolbarGraphSaveSettings(
         if (!(graph->Flags & TOOLSTATUS_GRAPH_ENABLED))
             continue;
 
-        pluginName = PhGetPluginName(graph->Plugin);
+        pluginName = graph->Plugin ? PhGetPluginName(graph->Plugin) : NULL;
+
         PhAppendFormatStringBuilder(
             &graphListBuilder,
             L"%lu|%lu|%s|",
             graph->GraphId,
             graph->Flags & TOOLSTATUS_GRAPH_ENABLED ? 1 : 0,
-            graph->Plugin ? pluginName->Buffer : L""
+            PhGetStringOrEmpty(pluginName)
             );
-        PhDereferenceObject(pluginName);
+
+        if (pluginName)
+            PhDereferenceObject(pluginName);
     }
 
     if (graphListBuilder.String->Length != 0)
@@ -280,7 +283,7 @@ VOID ToolbarUpdateGraphs(
         graph->GraphState.TooltipIndex = ULONG_MAX;
         Graph_MoveGrid(graph->GraphHandle, 1);
         Graph_Draw(graph->GraphHandle);
-        Graph_UpdateTooltip(graph->GraphHandle);
+        //Graph_UpdateTooltip(graph->GraphHandle);
         InvalidateRect(graph->GraphHandle, NULL, FALSE);
     }
 }

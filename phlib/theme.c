@@ -177,7 +177,7 @@ VOID PhInitializeWindowTheme(
             WindowHandle,
             0x1000,
             PhpThemeWindowEnumChildWindows,
-            0
+            NULL
             );
 
         InvalidateRect(WindowHandle, NULL, FALSE); // HACK
@@ -226,7 +226,7 @@ VOID PhReInitializeWindowTheme(
         WindowHandle,
         0x1000,
         PhpReInitializeThemeWindowEnumChildWindows,
-        0
+        NULL
         );
 
     do
@@ -242,7 +242,7 @@ VOID PhReInitializeWindowTheme(
                 WCHAR windowClassName[MAX_PATH];
 
                 if (!GetClassName(currentWindow, windowClassName, RTL_NUMBER_OF(windowClassName)))
-                    windowClassName[0] = 0;
+                    windowClassName[0] = UNICODE_NULL;
 
                 //dprintf("PhReInitializeWindowTheme: %S\r\n", windowClassName);
 
@@ -254,7 +254,7 @@ VOID PhReInitializeWindowTheme(
                             currentWindow,
                             0x1000,
                             PhpReInitializeThemeWindowEnumChildWindows,
-                            0
+                            NULL
                             );
                         //PhReInitializeWindowTheme(currentWindow);
                     }
@@ -272,12 +272,12 @@ VOID PhInitializeThemeWindowHeader(
     _In_ HWND HeaderWindow
     )
 {
-    PPHP_THEME_WINDOW_HEADER_CONTEXT headerControlContext;
+    PPHP_THEME_WINDOW_HEADER_CONTEXT context;
 
-    headerControlContext = PhAllocateZero(sizeof(PHP_THEME_WINDOW_HEADER_CONTEXT));
-    headerControlContext->DefaultWindowProc = (WNDPROC)GetWindowLongPtr(HeaderWindow, GWLP_WNDPROC);
+    context = PhAllocateZero(sizeof(PHP_THEME_WINDOW_HEADER_CONTEXT));
+    context->DefaultWindowProc = (WNDPROC)GetWindowLongPtr(HeaderWindow, GWLP_WNDPROC);
 
-    PhSetWindowContext(HeaderWindow, SHRT_MAX, headerControlContext);
+    PhSetWindowContext(HeaderWindow, SHRT_MAX, context);
     SetWindowLongPtr(HeaderWindow, GWLP_WNDPROC, (LONG_PTR)PhpThemeWindowHeaderSubclassProc);
 
     InvalidateRect(HeaderWindow, NULL, FALSE);
@@ -287,15 +287,15 @@ VOID PhInitializeThemeWindowTabControl(
     _In_ HWND TabControlWindow
     )
 {
-    PPHP_THEME_WINDOW_TAB_CONTEXT tabControlContext;
+    PPHP_THEME_WINDOW_TAB_CONTEXT context;
 
     if (!PhpTabControlFontHandle)
         PhpTabControlFontHandle = PhDuplicateFontWithNewHeight(PhApplicationFont, 15);
 
-    tabControlContext = PhAllocateZero(sizeof(PHP_THEME_WINDOW_TAB_CONTEXT));
-    tabControlContext->DefaultWindowProc = (WNDPROC)GetWindowLongPtr(TabControlWindow, GWLP_WNDPROC);
+    context = PhAllocateZero(sizeof(PHP_THEME_WINDOW_TAB_CONTEXT));
+    context->DefaultWindowProc = (WNDPROC)GetWindowLongPtr(TabControlWindow, GWLP_WNDPROC);
 
-    PhSetWindowContext(TabControlWindow, SHRT_MAX, tabControlContext);
+    PhSetWindowContext(TabControlWindow, SHRT_MAX, context);
     SetWindowLongPtr(TabControlWindow, GWLP_WNDPROC, (LONG_PTR)PhpThemeWindowTabControlWndSubclassProc);
 
     PhSetWindowStyle(TabControlWindow, TCS_OWNERDRAWFIXED, TCS_OWNERDRAWFIXED);
@@ -309,13 +309,13 @@ VOID PhInitializeWindowThemeStatusBar(
     _In_ HWND StatusBarHandle
     )
 {
-    PPHP_THEME_WINDOW_STATUSBAR_CONTEXT statusbarContext;
+    PPHP_THEME_WINDOW_STATUSBAR_CONTEXT context;
 
-    statusbarContext = PhAllocateZero(sizeof(PHP_THEME_WINDOW_STATUSBAR_CONTEXT));
-    statusbarContext->DefaultWindowProc = (WNDPROC)GetWindowLongPtr(StatusBarHandle, GWLP_WNDPROC);
-    statusbarContext->StatusThemeData = OpenThemeData(StatusBarHandle, VSCLASS_STATUS);
+    context = PhAllocateZero(sizeof(PHP_THEME_WINDOW_STATUSBAR_CONTEXT));
+    context->DefaultWindowProc = (WNDPROC)GetWindowLongPtr(StatusBarHandle, GWLP_WNDPROC);
+    context->StatusThemeData = OpenThemeData(StatusBarHandle, VSCLASS_STATUS);
 
-    PhSetWindowContext(StatusBarHandle, SHRT_MAX, statusbarContext);
+    PhSetWindowContext(StatusBarHandle, SHRT_MAX, context);
     SetWindowLongPtr(StatusBarHandle, GWLP_WNDPROC, (LONG_PTR)PhpThemeWindowStatusbarWndSubclassProc);
 
     InvalidateRect(StatusBarHandle, NULL, FALSE);
@@ -345,14 +345,14 @@ BOOLEAN CALLBACK PhpThemeWindowEnumChildWindows(
         WindowHandle,
         0x1000,
         PhpThemeWindowEnumChildWindows,
-        0
+        NULL
         );
 
     if (PhGetWindowContext(WindowHandle, SHRT_MAX)) // HACK
         return TRUE;
 
     if (!GetClassName(WindowHandle, windowClassName, RTL_NUMBER_OF(windowClassName)))
-        windowClassName[0] = 0;
+        windowClassName[0] = UNICODE_NULL;
 
     //dprintf("PhpThemeWindowEnumChildWindows: %S\r\n", windowClassName);
 
@@ -502,11 +502,11 @@ BOOLEAN CALLBACK PhpReInitializeThemeWindowEnumChildWindows(
         WindowHandle,
         0x1000,
         PhpReInitializeThemeWindowEnumChildWindows,
-        0
+        NULL
         );
 
     if (!GetClassName(WindowHandle, windowClassName, RTL_NUMBER_OF(windowClassName)))
-        windowClassName[0] = 0;
+        windowClassName[0] = UNICODE_NULL;
 
     //dprintf("PhpReInitializeThemeWindowEnumChildWindows: %S\r\n", windowClassName);
 
@@ -1362,7 +1362,7 @@ LRESULT CALLBACK PhpThemeWindowDrawListViewGroup(
 
                 if (SystemParametersInfo(SPI_GETNONCLIENTMETRICS, 0, &metrics, 0))
                 {
-                    metrics.lfMessageFont.lfHeight = -11;
+                    metrics.lfMessageFont.lfHeight = PhMultiplyDivideSigned(-11, PhGlobalDpi, 96);
                     metrics.lfMessageFont.lfWeight = FW_BOLD;
 
                     PhpListViewFontHandle = CreateFontIndirect(&metrics.lfMessageFont);
@@ -1442,7 +1442,7 @@ LRESULT CALLBACK PhpThemeWindowSubclassProc(
                     WCHAR className[MAX_PATH];
 
                     if (!GetClassName(customDraw->hdr.hwndFrom, className, RTL_NUMBER_OF(className)))
-                        className[0] = 0;
+                        className[0] = UNICODE_NULL;
 
                     //dprintf("NM_CUSTOMDRAW: %S\r\n", className);
 
@@ -1563,7 +1563,7 @@ LRESULT CALLBACK PhpThemeWindowGroupBoxSubclassProc(
 
                 if (SystemParametersInfo(SPI_GETNONCLIENTMETRICS, 0, &metrics, 0))
                 {
-                    metrics.lfMessageFont.lfHeight = -12;
+                    metrics.lfMessageFont.lfHeight = PhMultiplyDivideSigned(-11, PhGlobalDpi, 96);
                     metrics.lfMessageFont.lfWeight = FW_BOLD;
 
                     PhpGroupboxFontHandle = CreateFontIndirect(&metrics.lfMessageFont);

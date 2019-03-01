@@ -646,6 +646,12 @@ NTSTATUS PhGetProcessPebString(
             )))
             return status;
 
+        if (unicodeString.Length == 0)
+        {
+            *String = PhReferenceEmptyString();
+            return status;
+        }
+
         string = PhCreateStringEx(NULL, unicodeString.Length);
 
         // Read the string contents.
@@ -688,6 +694,12 @@ NTSTATUS PhGetProcessPebString(
             )))
             return status;
 
+        if (unicodeString32.Length == 0)
+        {
+            *String = PhReferenceEmptyString();
+            return status;
+        }
+
         string = PhCreateStringEx(NULL, unicodeString32.Length);
 
         // Read the string contents.
@@ -723,10 +735,9 @@ NTSTATUS PhGetProcessCommandLine(
     _Out_ PPH_STRING *CommandLine
     )
 {
-    NTSTATUS status;
-
     if (WindowsVersion >= WINDOWS_8_1)
     {
+        NTSTATUS status;
         PUNICODE_STRING commandLine;
 
         status = PhpQueryProcessVariableSize(
@@ -1051,8 +1062,8 @@ BOOLEAN PhEnumProcessEnvironmentVariables(
     {
         if (currentIndex >= length)
             return FALSE;
-        if (*currentChar == '=')
-            break;
+        if ((*currentChar == '=') && (startIndex != currentIndex))
+            break; // equality sign is considered as a delimiter unless it is the first character (diversenok)
         if (*currentChar == 0)
             return FALSE; // no more variables
 
@@ -1112,7 +1123,7 @@ NTSTATUS PhQueryEnvironmentVariable(
     }
     else
     {
-        RtlInitUnicodeString(&variableValueUs, UNICODE_NULL);
+        RtlInitEmptyUnicodeString(&variableValueUs, NULL, 0);
     }
 
     status = RtlQueryEnvironmentVariable_U(
@@ -2309,6 +2320,7 @@ NTSTATUS PhGetTokenIntegrityLevelRID(
 {
     NTSTATUS status;
     PTOKEN_MANDATORY_LABEL mandatoryLabel;
+    ULONG subAuthoritiesCount;
     ULONG subAuthority;
     PWSTR integrityString;
 
@@ -2317,7 +2329,17 @@ NTSTATUS PhGetTokenIntegrityLevelRID(
     if (!NT_SUCCESS(status))
         return status;
 
-    subAuthority = *RtlSubAuthoritySid(mandatoryLabel->Label.Sid, 0);
+    subAuthoritiesCount = *RtlSubAuthorityCountSid(mandatoryLabel->Label.Sid);
+
+    if (subAuthoritiesCount > 0)
+    {
+        subAuthority = *RtlSubAuthoritySid(mandatoryLabel->Label.Sid, subAuthoritiesCount - 1);
+    }
+    else
+    {
+        subAuthority = SECURITY_MANDATORY_UNTRUSTED_RID;
+    }
+
     PhFree(mandatoryLabel);
 
     if (IntegrityString)
@@ -2506,6 +2528,24 @@ NTSTATUS PhSetFileSize(
         );
 }
 
+NTSTATUS PhDeleteFile(
+    _In_ HANDLE FileHandle
+    )
+{
+    FILE_DISPOSITION_INFORMATION dispositionInfo;
+    IO_STATUS_BLOCK isb;
+
+    dispositionInfo.DeleteFile = TRUE;
+
+    return NtSetInformationFile(
+        FileHandle,
+        &isb,
+        &dispositionInfo,
+        sizeof(FILE_DISPOSITION_INFORMATION),
+        FileDispositionInformation
+        );
+}
+
 NTSTATUS PhGetFileHandleName(
     _In_ HANDLE FileHandle,
     _Out_ PPH_STRING *FileName
@@ -2681,10 +2721,18 @@ NTSTATUS PhGetTransactionManagerLogFileName(
     if (!NT_SUCCESS(status))
         return status;
 
-    *LogFileName = PhCreateStringEx(
-        logPathInfo->LogPath,
-        logPathInfo->LogPathLength
-        );
+    if (logPathInfo->LogPathLength == 0)
+    {
+        *LogFileName = PhReferenceEmptyString();
+    }
+    else
+    {
+        *LogFileName = PhCreateStringEx(
+            logPathInfo->LogPath,
+            logPathInfo->LogPathLength
+            );
+    }
+
     PhFree(logPathInfo);
 
     return status;
@@ -2884,10 +2932,17 @@ NTSTATUS PhGetResourceManagerBasicInformation(
 
     if (Description)
     {
-        *Description = PhCreateStringEx(
-            basicInfo->Description,
-            basicInfo->DescriptionLength
-            );
+        if (basicInfo->DescriptionLength == 0)
+        {
+            *Description = PhReferenceEmptyString();
+        }
+        else
+        {
+            *Description = PhCreateStringEx(
+                basicInfo->Description,
+                basicInfo->DescriptionLength
+                );
+        }
     }
 
     PhFree(basicInfo);
@@ -3427,8 +3482,8 @@ BOOLEAN NTAPI PhpEnumProcessModulesCallback(
 
         if (indexOfLastBackslash != -1)
         {
-            Entry->BaseDllName.Buffer = PTR_ADD_OFFSET(Entry->FullDllName.Buffer, PTR_ADD_OFFSET(indexOfLastBackslash * sizeof(WCHAR), sizeof(WCHAR)));
-            Entry->BaseDllName.Length = Entry->FullDllName.Length - (USHORT)indexOfLastBackslash * sizeof(WCHAR) - sizeof(WCHAR);
+            Entry->BaseDllName.Buffer = PTR_ADD_OFFSET(Entry->FullDllName.Buffer, PTR_ADD_OFFSET(indexOfLastBackslash * sizeof(WCHAR), sizeof(UNICODE_NULL)));
+            Entry->BaseDllName.Length = Entry->FullDllName.Length - (USHORT)indexOfLastBackslash * sizeof(WCHAR) - sizeof(UNICODE_NULL);
             Entry->BaseDllName.MaximumLength = Entry->BaseDllName.Length;
         }
         else
@@ -3513,8 +3568,7 @@ BOOLEAN NTAPI PhpEnumProcessModulesCallback(
             NULL
             )))
         {
-            // HACK: Fixup the module load count.
-            // Temp fix until PhpModuleQueryWorker can be used for 'Stage2'. 
+            // Fixup the module load count. (dmex)
             Entry->ObsoleteLoadCount = (USHORT)ldrDagNode.LoadCount;
         }
     }
@@ -3823,7 +3877,7 @@ BOOLEAN NTAPI PhpEnumProcessModules32Callback(
     {
         // Read the base DLL name string and add a null terminator.
 
-        baseDllNameBuffer = PhAllocate(nativeEntry.BaseDllName.Length + sizeof(WCHAR));
+        baseDllNameBuffer = PhAllocate(nativeEntry.BaseDllName.Length + sizeof(UNICODE_NULL));
 
         if (NT_SUCCESS(NtReadVirtualMemory(
             ProcessHandle,
@@ -3845,7 +3899,7 @@ BOOLEAN NTAPI PhpEnumProcessModules32Callback(
 
         // Read the full DLL name string and add a null terminator.
 
-        fullDllNameBuffer = PhAllocate(nativeEntry.FullDllName.Length + sizeof(WCHAR));
+        fullDllNameBuffer = PhAllocate(nativeEntry.FullDllName.Length + sizeof(UNICODE_NULL));
 
         if (NT_SUCCESS(NtReadVirtualMemory(
             ProcessHandle,
@@ -3905,8 +3959,7 @@ BOOLEAN NTAPI PhpEnumProcessModules32Callback(
             NULL
             )))
         {
-            // HACK: Fixup the module load count.
-            // Temp fix until PhpModuleQueryWorker can be used for 'Stage2'. 
+            // Fixup the module load count. (dmex)
             nativeEntry.ObsoleteLoadCount = (USHORT)ldrDagNode32.LoadCount;
         }
     }
@@ -5804,10 +5857,10 @@ PPH_STRING PhGetFileName(
         PH_STRINGREF systemRoot;
 
         PhGetSystemRoot(&systemRoot);
-        newFileName = PhCreateStringEx(NULL, systemRoot.Length + sizeof(WCHAR) + FileName->Length);
+        newFileName = PhCreateStringEx(NULL, systemRoot.Length + sizeof(UNICODE_NULL) + FileName->Length);
         memcpy(newFileName->Buffer, systemRoot.Buffer, systemRoot.Length);
         newFileName->Buffer[systemRoot.Length / sizeof(WCHAR)] = OBJ_NAME_PATH_SEPARATOR;
-        memcpy(PTR_ADD_OFFSET(newFileName->Buffer, systemRoot.Length + sizeof(WCHAR)), FileName->Buffer, FileName->Length);
+        memcpy(PTR_ADD_OFFSET(newFileName->Buffer, systemRoot.Length + sizeof(UNICODE_NULL)), FileName->Buffer, FileName->Length);
     }
     else if (FileName->Length != 0 && FileName->Buffer[0] == OBJ_NAME_PATH_SEPARATOR)
     {
@@ -5825,7 +5878,7 @@ PPH_STRING PhGetFileName(
             // If the file name starts with "\Windows", prepend the system drive.
             if (PhStartsWithString2(newFileName, L"\\Windows", TRUE))
             {
-                newFileName = PhCreateStringEx(NULL, FileName->Length + sizeof(WCHAR) * sizeof(WCHAR));
+                newFileName = PhCreateStringEx(NULL, FileName->Length + sizeof(UNICODE_NULL) * sizeof(WCHAR));
                 newFileName->Buffer[0] = USER_SHARED_DATA->NtSystemRoot[0];
                 newFileName->Buffer[1] = ':';
                 memcpy(&newFileName->Buffer[2], FileName->Buffer, FileName->Length);
@@ -5968,8 +6021,7 @@ VOID PhpRtlModulesToGenericModules(
             // directory.
             PhGetSystemRoot(&systemRoot);
             newFileName = PhConcatStringRef3(&systemRoot, &driversString, &moduleInfo.Name->sr);
-            PhDereferenceObject(moduleInfo.FileName);
-            moduleInfo.FileName = newFileName;
+            PhMoveReference(&moduleInfo.FileName, newFileName);
         }
 
         cont = Callback(&moduleInfo, Context);
@@ -6764,7 +6816,7 @@ NTSTATUS PhQueryValueKey(
     }
     else
     {
-        RtlInitUnicodeString(&valueName, NULL);
+        RtlInitEmptyUnicodeString(&valueName, NULL, 0);
     }
 
     bufferSize = 0x100;
@@ -6815,7 +6867,7 @@ NTSTATUS PhEnumerateKey(
     bufferSize = 0x100;
     buffer = PhAllocate(bufferSize);
 
-    while (TRUE)
+    do
     {
         status = NtEnumerateKey(
             KeyHandle,
@@ -6850,11 +6902,11 @@ NTSTATUS PhEnumerateKey(
         if (!NT_SUCCESS(status))
             break;
 
-        if (!Callback(buffer, Context))
+        if (!Callback(KeyHandle, buffer, Context))
             break;
 
         index++;
-    }
+    } while (TRUE);
 
     PhFree(buffer);
 
@@ -7108,6 +7160,38 @@ NTSTATUS PhQueryFullAttributesFileWin32(
     return status;
 }
 
+NTSTATUS PhQueryAttributesFileWin32(
+    _In_ PWSTR FileName,
+    _Out_ PFILE_BASIC_INFORMATION FileInformation
+    )
+{
+    NTSTATUS status;
+    UNICODE_STRING fileName;
+    OBJECT_ATTRIBUTES oa;
+
+    if (!NT_SUCCESS(status = RtlDosPathNameToNtPathName_U_WithStatus(
+        FileName,
+        &fileName,
+        NULL,
+        NULL
+        )))
+        return status;
+
+    InitializeObjectAttributes(
+        &oa,
+        &fileName,
+        OBJ_CASE_INSENSITIVE,
+        NULL,
+        NULL
+        );
+
+    status = NtQueryAttributesFile(&oa, FileInformation);
+
+    RtlFreeUnicodeString(&fileName);
+
+    return status;
+}
+
 /**
  * Deletes a file.
  *
@@ -7188,7 +7272,7 @@ NTSTATUS PhCreateDirectory(
                         &directoryHandle,
                         PhGetString(tempPathString),
                         FILE_GENERIC_READ,
-                        FILE_ATTRIBUTE_NORMAL,
+                        FILE_ATTRIBUTE_DIRECTORY,
                         FILE_SHARE_READ | FILE_SHARE_WRITE,
                         FILE_CREATE,
                         FILE_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT | FILE_OPEN_FOR_BACKUP_INTENT
@@ -7242,26 +7326,16 @@ static BOOLEAN PhpDeleteDirectoryCallback(
             &directoryHandle,
             PhGetString(fullName),
             FILE_GENERIC_READ | DELETE,
-            FILE_ATTRIBUTE_NORMAL,
+            FILE_ATTRIBUTE_DIRECTORY,
             FILE_SHARE_READ | FILE_SHARE_DELETE,
             FILE_OPEN,
             FILE_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT
             )))
         {
-            IO_STATUS_BLOCK isb;
-            FILE_DISPOSITION_INFORMATION fileInfo;
-
             PhEnumDirectoryFile(directoryHandle, NULL, PhpDeleteDirectoryCallback, fullName);
 
             // Delete the directory. 
-            fileInfo.DeleteFile = TRUE;
-            NtSetInformationFile(
-                directoryHandle,
-                &isb,
-                &fileInfo,
-                sizeof(FILE_DISPOSITION_INFORMATION),
-                FileDispositionInformation
-                );
+            PhDeleteFile(directoryHandle);
 
             NtClose(directoryHandle);
         }
@@ -7326,7 +7400,7 @@ NTSTATUS PhDeleteDirectory(
         &directoryHandle,
         PhGetString(DirectoryPath),
         FILE_GENERIC_READ | DELETE,
-        FILE_ATTRIBUTE_NORMAL,
+        FILE_ATTRIBUTE_DIRECTORY,
         FILE_SHARE_READ | FILE_SHARE_DELETE,
         FILE_OPEN,
         FILE_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT
@@ -7334,9 +7408,6 @@ NTSTATUS PhDeleteDirectory(
 
     if (NT_SUCCESS(status))
     {
-        IO_STATUS_BLOCK isb;
-        FILE_DISPOSITION_INFORMATION fileInfo;
-
         // Remove any files or folders inside the directory.
         status = PhEnumDirectoryFile(
             directoryHandle, 
@@ -7346,14 +7417,7 @@ NTSTATUS PhDeleteDirectory(
             );
 
         // Remove the directory. 
-        fileInfo.DeleteFile = TRUE;
-        status = NtSetInformationFile(
-            directoryHandle,
-            &isb,
-            &fileInfo,
-            sizeof(FILE_DISPOSITION_INFORMATION),
-            FileDispositionInformation
-            );
+        PhDeleteFile(directoryHandle);
 
         NtClose(directoryHandle);
     }
@@ -7375,6 +7439,16 @@ NTSTATUS PhCreatePipe(
     _Out_ PHANDLE PipeWriteHandle
     )
 {
+    return PhCreatePipeEx(PipeReadHandle, PipeWriteHandle, FALSE, NULL);
+}
+
+NTSTATUS PhCreatePipeEx(
+    _Out_ PHANDLE PipeReadHandle,
+    _Out_ PHANDLE PipeWriteHandle,
+    _In_ BOOLEAN InheritHandles,
+    _In_opt_ PSECURITY_DESCRIPTOR SecurityDescriptor
+    )
+{
     NTSTATUS status;
     PACL pipeAcl = NULL;
     HANDLE pipeDirectoryHandle;
@@ -7382,12 +7456,12 @@ NTSTATUS PhCreatePipe(
     HANDLE pipeWriteHandle;
     LARGE_INTEGER pipeTimeout;
     UNICODE_STRING pipeNameUs;
-    OBJECT_ATTRIBUTES oa;
+    OBJECT_ATTRIBUTES objectAttributes;
     IO_STATUS_BLOCK isb;
 
     RtlInitUnicodeString(&pipeNameUs, DEVICE_NAMED_PIPE);
     InitializeObjectAttributes(
-        &oa,
+        &objectAttributes,
         &pipeNameUs,
         OBJ_CASE_INSENSITIVE,
         NULL,
@@ -7397,7 +7471,7 @@ NTSTATUS PhCreatePipe(
     status = NtOpenFile(
         &pipeDirectoryHandle,
         GENERIC_READ | SYNCHRONIZE,
-        &oa,
+        &objectAttributes,
         &isb,
         FILE_SHARE_READ | FILE_SHARE_WRITE,
         FILE_SYNCHRONOUS_IO_NONALERT
@@ -7406,29 +7480,36 @@ NTSTATUS PhCreatePipe(
     if (!NT_SUCCESS(status))
         return status;
 
-    RtlInitUnicodeString(&pipeNameUs, UNICODE_NULL);
+    RtlInitEmptyUnicodeString(&pipeNameUs, NULL, 0);
     InitializeObjectAttributes(
-        &oa,
+        &objectAttributes,
         &pipeNameUs,
-        OBJ_CASE_INSENSITIVE,
+        OBJ_CASE_INSENSITIVE | (InheritHandles ? OBJ_INHERIT : 0),
         pipeDirectoryHandle,
         NULL
         );
 
-    if (NT_SUCCESS(RtlDefaultNpAcl(&pipeAcl)))
+    if (SecurityDescriptor)
     {
-        SECURITY_DESCRIPTOR securityDescriptor;
+        objectAttributes.SecurityDescriptor = SecurityDescriptor;
+    }
+    else
+    {
+        if (NT_SUCCESS(RtlDefaultNpAcl(&pipeAcl)))
+        {
+            SECURITY_DESCRIPTOR securityDescriptor;
 
-        RtlCreateSecurityDescriptor(&securityDescriptor, SECURITY_DESCRIPTOR_REVISION);
-        RtlSetDaclSecurityDescriptor(&securityDescriptor, TRUE, pipeAcl, FALSE);
+            RtlCreateSecurityDescriptor(&securityDescriptor, SECURITY_DESCRIPTOR_REVISION);
+            RtlSetDaclSecurityDescriptor(&securityDescriptor, TRUE, pipeAcl, FALSE);
 
-        oa.SecurityDescriptor = &securityDescriptor;
+            objectAttributes.SecurityDescriptor = &securityDescriptor;
+        }
     }
 
     status = NtCreateNamedPipeFile(
         &pipeReadHandle,
         FILE_WRITE_ATTRIBUTES | GENERIC_READ | SYNCHRONIZE,
-        &oa,
+        &objectAttributes,
         &isb,
         FILE_SHARE_READ | FILE_SHARE_WRITE,
         FILE_CREATE,
@@ -7436,10 +7517,10 @@ NTSTATUS PhCreatePipe(
         FILE_PIPE_BYTE_STREAM_TYPE,
         FILE_PIPE_BYTE_STREAM_MODE,
         FILE_PIPE_QUEUE_OPERATION,
-        ULONG_MAX,
+        1,
         PAGE_SIZE,
         PAGE_SIZE,
-        PhTimeoutFromMilliseconds(&pipeTimeout, 500)
+        PhTimeoutFromMilliseconds(&pipeTimeout, 120000)
         );
 
     if (!NT_SUCCESS(status))
@@ -7451,11 +7532,11 @@ NTSTATUS PhCreatePipe(
         return status;
     }
 
-    RtlInitUnicodeString(&pipeNameUs, UNICODE_NULL);
+    RtlInitEmptyUnicodeString(&pipeNameUs, NULL, 0);
     InitializeObjectAttributes(
-        &oa,
+        &objectAttributes,
         &pipeNameUs,
-        OBJ_CASE_INSENSITIVE,
+        OBJ_CASE_INSENSITIVE | (InheritHandles ? OBJ_INHERIT : 0),
         pipeReadHandle,
         NULL
         );
@@ -7463,7 +7544,7 @@ NTSTATUS PhCreatePipe(
     status = NtOpenFile(
         &pipeWriteHandle,
         FILE_READ_ATTRIBUTES | GENERIC_WRITE | SYNCHRONIZE,
-        &oa,
+        &objectAttributes,
         &isb,
         FILE_SHARE_READ | FILE_SHARE_WRITE,
         FILE_NON_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT

@@ -20,7 +20,9 @@
 #define IDB_SEARCH_INACTIVE_BMP         113
 #define IDD_PESTREAMS                   113
 #define IDD_PELINKS                     114
+#define IDD_PIDS                        115
 #define IDD_ELFDYNAMIC                  116
+#define IDD_TLS                         117
 #define IDC_SYMBOLTREE                  119
 #define IDC_TARGETMACHINE               1003
 #define IDC_CHECKSUM                    1004
@@ -37,6 +39,7 @@
 #define IDC_VERSION                     1013
 #define IDC_VERSIONSTRING               1014
 #define IDC_IMAGEBASE                   1015
+#define IDC_MVIDSTRING                  1015
 #define IDC_ENTRYPOINT                  1016
 #define IDC_SYMSEARCH                   1017
 #define IDC_IMAGETYPE                   1017

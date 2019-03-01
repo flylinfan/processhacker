@@ -172,22 +172,6 @@ PhLargeIntegerToLocalSystemTime(
     FileTimeToSystemTime(&newFileTime, SystemTime);
 }
 
-PHLIBAPI
-VOID
-NTAPI
-PhReferenceObjects(
-    _In_reads_(NumberOfObjects) PVOID *Objects,
-    _In_ ULONG NumberOfObjects
-    );
-
-PHLIBAPI
-VOID
-NTAPI
-PhDereferenceObjects(
-    _In_reads_(NumberOfObjects) PVOID *Objects,
-    _In_ ULONG NumberOfObjects
-    );
-
 // NLS
 
 LCID PhGetSystemDefaultLCID(
@@ -228,7 +212,7 @@ PHLIBAPI
 INT
 NTAPI
 PhShowMessage(
-    _In_ HWND hWnd,
+    _In_opt_ HWND hWnd,
     _In_ ULONG Type,
     _In_ PWSTR Format,
     ...
@@ -242,7 +226,7 @@ PHLIBAPI
 INT 
 NTAPI
 PhShowMessage2(
-    _In_ HWND hWnd,
+    _In_opt_ HWND hWnd,
     _In_ ULONG Buttons,
     _In_opt_ PWSTR Icon,
     _In_opt_ PWSTR Title,
@@ -266,7 +250,7 @@ PHLIBAPI
 VOID
 NTAPI
 PhShowStatus(
-    _In_ HWND hWnd,
+    _In_opt_ HWND hWnd,
     _In_opt_ PWSTR Message,
     _In_ NTSTATUS Status,
     _In_opt_ ULONG Win32Result
@@ -567,6 +551,22 @@ PhFormatImageVersionInfo(
     );
 
 PHLIBAPI
+BOOLEAN
+NTAPI
+PhInitializeImageVersionInfoCached(
+    _Out_ PPH_IMAGE_VERSION_INFO ImageVersionInfo,
+    _In_ PPH_STRING FileName,
+    _In_ BOOLEAN IsSubsystemProcess
+    );
+
+PHLIBAPI
+VOID
+NTAPI
+PhFlushImageVersionInfoCache(
+    VOID
+    );
+
+PHLIBAPI
 PPH_STRING
 NTAPI
 PhGetFullPath(
@@ -796,6 +796,7 @@ PhShellExecute(
 
 #define PH_SHELL_EXECUTE_ADMIN 0x1
 #define PH_SHELL_EXECUTE_PUMP_MESSAGES 0x2
+#define PH_SHELL_EXECUTE_NOZONECHECKS 0x4
 
 PHLIBAPI
 BOOLEAN
@@ -917,7 +918,7 @@ PHLIBAPI
 BOOLEAN
 NTAPI
 PhShowFileDialog(
-    _In_ HWND hWnd,
+    _In_opt_ HWND hWnd,
     _In_ PVOID FileDialog
     );
 
@@ -1105,12 +1106,11 @@ PhParseCommandLineFuzzy(
     );
 
 PHLIBAPI
-BOOLEAN
+PPH_STRING
 NTAPI
 PhSearchFilePath(
     _In_ PWSTR FileName,
-    _In_opt_ PWSTR Extension,
-    _Out_ PPH_STRING *FilePath
+    _In_opt_ PWSTR Extension
     );
 
 PHLIBAPI
@@ -1157,8 +1157,8 @@ BOOLEAN
 NTAPI
 PhExtractIcon(
     _In_ PWSTR FileName,
-    _In_ HICON *IconLarge,
-    _In_ HICON *IconSmall
+    _Out_opt_ HICON *IconLarge,
+    _Out_opt_ HICON *IconSmall
     );
 
 PHLIBAPI
@@ -1167,8 +1167,8 @@ NTAPI
 PhExtractIconEx(
     _In_ PWSTR FileName,
     _In_ INT IconIndex,
-    _In_ HICON *IconLarge,
-    _In_ HICON *IconSmall
+    _Out_opt_ HICON *IconLarge,
+    _Out_opt_ HICON *IconSmall
     );
 
 PHLIBAPI
@@ -1262,6 +1262,28 @@ NTAPI
 PhGetExportNameFromOrdinal(
     _In_ PVOID DllBase,
     _In_opt_ USHORT ProcedureNumber
+    );
+
+PHLIBAPI
+NTSTATUS
+NTAPI
+PhLoadAllImportsForDll(
+    _In_ PWSTR TargetDllName,
+    _In_ PSTR ImportDllName
+    );
+
+PHLIBAPI
+PPH_STRING
+NTAPI
+PhGetFileText(
+    _In_ HANDLE FileHandle
+    );
+
+PHLIBAPI
+PPH_STRING
+NTAPI
+PhFileReadAllText(
+    _In_ PWSTR FileName
     );
 
 #ifdef __cplusplus

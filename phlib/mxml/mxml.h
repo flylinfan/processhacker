@@ -205,8 +205,8 @@ PHMXMLAPI extern void		mxmlDelete(mxml_node_t *node);
 PHMXMLAPI extern void		mxmlElementDeleteAttr(mxml_node_t *node,
                                   const char *name);
 PHMXMLAPI extern const char	*mxmlElementGetAttr(mxml_node_t *node, const char *name);
-extern const char       *mxmlElementGetAttrByIndex(mxml_node_t *node, int idx, const char **name);
-extern int              mxmlElementGetAttrCount(mxml_node_t *node);
+PHMXMLAPI extern const char       *mxmlElementGetAttrByIndex(mxml_node_t *node, int idx, const char **name);
+PHMXMLAPI extern int              mxmlElementGetAttrCount(mxml_node_t *node);
 PHMXMLAPI extern void		mxmlElementSetAttr(mxml_node_t *node, const char *name,
                                const char *value);
 extern void		mxmlElementSetAttrf(mxml_node_t *node, const char *name,
@@ -226,17 +226,17 @@ extern mxml_node_t	*mxmlFindPath(mxml_node_t *node, const char *path);
 extern const char	*mxmlGetCDATA(mxml_node_t *node);
 extern const void	*mxmlGetCustom(mxml_node_t *node);
 extern const char	*mxmlGetElement(mxml_node_t *node);
-extern mxml_node_t	*mxmlGetFirstChild(mxml_node_t *node);
+PHMXMLAPI extern mxml_node_t	*mxmlGetFirstChild(mxml_node_t *node);
 extern int		mxmlGetInteger(mxml_node_t *node);
 extern mxml_node_t	*mxmlGetLastChild(mxml_node_t *node);
-extern mxml_node_t	*mxmlGetNextSibling(mxml_node_t *node);
-extern const char	*mxmlGetOpaque(mxml_node_t *node);
+PHMXMLAPI extern mxml_node_t	*mxmlGetNextSibling(mxml_node_t *node);
+PHMXMLAPI extern const char	*mxmlGetOpaque(mxml_node_t *node);
 extern mxml_node_t	*mxmlGetParent(mxml_node_t *node);
 extern mxml_node_t	*mxmlGetPrevSibling(mxml_node_t *node);
 extern double		mxmlGetReal(mxml_node_t *node);
 extern int		mxmlGetRefCount(mxml_node_t *node);
 extern const char	*mxmlGetText(mxml_node_t *node, int *whitespace);
-extern mxml_type_t	mxmlGetType(mxml_node_t *node);
+PHMXMLAPI extern mxml_type_t	mxmlGetType(mxml_node_t *node);
 extern void		*mxmlGetUserData(mxml_node_t *node);
 extern void		mxmlIndexDelete(mxml_index_t *ind);
 extern mxml_node_t	*mxmlIndexEnum(mxml_index_t *ind);

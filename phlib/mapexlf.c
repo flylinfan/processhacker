@@ -391,7 +391,7 @@ BOOLEAN PhGetMappedWslImageSymbols(
 
         section = IMAGE_ELF64_SECTION_BY_INDEX(sectionHeader, i);
 
-        // NOTE: The below code needs some improvements for SHT_DYNSYM -dmex
+        // NOTE: The below code needs some improvements for SHT_SYMTAB -dmex
         if (section->sh_type != SHT_SYMTAB && section->sh_type != SHT_DYNSYM)
             continue;
 
@@ -419,6 +419,7 @@ BOOLEAN PhGetMappedWslImageSymbols(
                 import->Size = entry[ii].st_size;
                 import->TypeInfo = entry[ii].st_info;
                 import->OtherInfo = entry[ii].st_other;
+                import->SectionIndex = entry[ii].st_shndx;
 
                 // function name
                 PhCopyStringZFromBytes(
@@ -461,6 +462,7 @@ BOOLEAN PhGetMappedWslImageSymbols(
                 export->Size = entry[ii].st_size;
                 export->TypeInfo = entry[ii].st_info;
                 export->OtherInfo = entry[ii].st_other;
+                export->SectionIndex = entry[ii].st_shndx;
 
                 // function name
                 PhCopyStringZFromBytes(
@@ -483,6 +485,7 @@ BOOLEAN PhGetMappedWslImageSymbols(
                 export->Size = entry[ii].st_size;
                 export->TypeInfo = entry[ii].st_info;
                 export->OtherInfo = entry[ii].st_other;
+                export->SectionIndex = entry[ii].st_shndx;
 
                 // function name
                 PhCopyStringZFromBytes(
