@@ -71,6 +71,12 @@ LRESULT CALLBACK PhpThemeWindowGroupBoxSubclassProc(
     _In_ WPARAM wParam,
     _In_ LPARAM lParam
     );
+LRESULT CALLBACK PhpThemeWindowEditSubclassProc(
+    _In_ HWND WindowHandle,
+    _In_ UINT uMsg,
+    _In_ WPARAM wParam,
+    _In_ LPARAM lParam
+    );
 LRESULT CALLBACK PhpThemeWindowTabControlWndSubclassProc(
     _In_ HWND WindowHandle,
     _In_ UINT uMsg,
@@ -268,6 +274,26 @@ VOID PhReInitializeWindowTheme(
     InvalidateRect(WindowHandle, NULL, FALSE);
 }
 
+VOID PhInitializeThemeWindowFrame(
+    _In_ HWND WindowHandle
+    )
+{
+    if (!PhpThemeEnable)
+        return;
+
+    switch (PhpThemeColorMode)
+    {
+    case 0: // New colors
+        if (WindowsVersion >= WINDOWS_10_RS5)
+            RemoveProp(WindowHandle, L"UseImmersiveDarkModeColors");
+        break;
+    case 1: // Old colors
+        if (WindowsVersion >= WINDOWS_10_RS5)
+            SetProp(WindowHandle, L"UseImmersiveDarkModeColors", (HANDLE)TRUE);
+        break;
+    }
+}
+
 VOID PhInitializeThemeWindowHeader(
     _In_ HWND HeaderWindow
     )
@@ -334,6 +360,25 @@ VOID PhInitializeThemeWindowGroupBox(
     InvalidateRect(GroupBoxHandle, NULL, FALSE);
 }
 
+VOID PhInitializeThemeWindowEditControl(
+    _In_ HWND EditControlHandle
+    )
+{
+    WNDPROC editControlWindowProc;
+
+    // HACK: The searchbox control does its own themed drawing and it uses the
+    // same window context value so we know when to ignore theming.
+    if (PhGetWindowContext(EditControlHandle, SHRT_MAX))
+        return;
+
+    editControlWindowProc = (WNDPROC)GetWindowLongPtr(EditControlHandle, GWLP_WNDPROC);
+    PhSetWindowContext(EditControlHandle, SHRT_MAX, editControlWindowProc);
+    SetWindowLongPtr(EditControlHandle, GWLP_WNDPROC, (LONG_PTR)PhpThemeWindowEditSubclassProc);
+
+    InvalidateRect(EditControlHandle, NULL, FALSE);
+    //SetWindowPos(EditControlHandle, NULL, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_DRAWFRAME);
+}
+
 BOOLEAN CALLBACK PhpThemeWindowEnumChildWindows(
     _In_ HWND WindowHandle,
     _In_opt_ PVOID Context
@@ -377,7 +422,7 @@ BOOLEAN CALLBACK PhpThemeWindowEnumChildWindows(
     }
     else if (PhEqualStringZ(windowClassName, L"Edit", TRUE))
     {
-        NOTHING;
+        PhInitializeThemeWindowEditControl(WindowHandle);
     }
     else if (PhEqualStringZ(windowClassName, L"ScrollBar", FALSE))
     {
@@ -1642,6 +1687,69 @@ LRESULT CALLBACK PhpThemeWindowGroupBoxSubclassProc(
             EndPaint(WindowHandle, &ps);
         }
         return TRUE;
+    }
+
+    return CallWindowProc(oldWndProc, WindowHandle, uMsg, wParam, lParam);
+}
+
+LRESULT CALLBACK PhpThemeWindowEditSubclassProc(
+    _In_ HWND WindowHandle,
+    _In_ UINT uMsg,
+    _In_ WPARAM wParam,
+    _In_ LPARAM lParam
+    )
+{
+    WNDPROC oldWndProc;
+
+    if (!(oldWndProc = PhGetWindowContext(WindowHandle, SHRT_MAX)))
+        return FALSE;
+
+    switch (uMsg)
+    {
+    case WM_DESTROY:
+        {
+            SetWindowLongPtr(WindowHandle, GWLP_WNDPROC, (LONG_PTR)oldWndProc);
+            PhRemoveWindowContext(WindowHandle, SHRT_MAX);
+        }
+        break;
+    case WM_NCPAINT:
+        {
+            HDC hdc;
+            ULONG flags;
+            RECT windowRect;
+            HRGN updateRegion;
+
+            updateRegion = (HRGN)wParam;
+
+            if (updateRegion == (HRGN)1) // HRGN_FULL
+                updateRegion = NULL;
+
+            flags = DCX_WINDOW | DCX_LOCKWINDOWUPDATE | 0x10000;
+
+            if (updateRegion)
+                flags |= DCX_INTERSECTRGN | 0x40000;
+
+            if (hdc = GetDCEx(WindowHandle, updateRegion, flags))
+            {
+                GetWindowRect(WindowHandle, &windowRect);
+                OffsetRect(&windowRect, -windowRect.left, -windowRect.top);
+
+                if (GetFocus() == WindowHandle)
+                {
+                    SetDCBrushColor(hdc, GetSysColor(COLOR_HOTLIGHT));
+                    FrameRect(hdc, &windowRect, GetStockObject(DC_BRUSH));
+                }
+                else
+                {
+                    SetDCBrushColor(hdc, RGB(65, 65, 65));
+                    FrameRect(hdc, &windowRect, GetStockObject(DC_BRUSH));
+                }
+
+                ReleaseDC(WindowHandle, hdc);
+                return 0;
+            }
+        }
+        break;
     }
 
     return CallWindowProc(oldWndProc, WindowHandle, uMsg, wParam, lParam);
