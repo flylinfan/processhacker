@@ -178,10 +178,13 @@ LCID PhGetSystemDefaultLCID(
     VOID
     )
 {
-    LCID localeId;
+    if (NtQueryDefaultLocale_Import())
+    {
+        LCID localeId;
 
-    if (NT_SUCCESS(NtQueryDefaultLocale(FALSE, &localeId)))
-        return localeId;
+        if (NT_SUCCESS(NtQueryDefaultLocale_Import()(FALSE, &localeId)))
+            return localeId;
+    }
 
     return MAKELCID(MAKELANGID(LANG_ENGLISH, SUBLANG_DEFAULT), SORT_DEFAULT);
 }
@@ -191,10 +194,13 @@ LCID PhGetUserDefaultLCID(
     VOID
     )
 {
-    LCID localeId;
+    if (NtQueryDefaultLocale_Import())
+    {
+        LCID localeId;
 
-    if (NT_SUCCESS(NtQueryDefaultLocale(TRUE, &localeId)))
-        return localeId;
+        if (NT_SUCCESS(NtQueryDefaultLocale_Import()(TRUE, &localeId)))
+            return localeId;
+    }
 
     return MAKELCID(MAKELANGID(LANG_ENGLISH, SUBLANG_DEFAULT), SORT_DEFAULT);
 }
@@ -235,10 +241,13 @@ LANGID PhGetUserDefaultUILanguage(
     VOID
     )
 {
-    LANGID languageId;
+    if (NtQueryDefaultUILanguage_Import())
+    {
+        LANGID languageId;
 
-    if (NT_SUCCESS(NtQueryDefaultUILanguage(&languageId)))
-        return languageId;
+        if (NT_SUCCESS(NtQueryDefaultUILanguage_Import()(&languageId)))
+            return languageId;
+    }
 
     return MAKELANGID(LANG_ENGLISH, SUBLANG_DEFAULT);
 }
@@ -256,6 +265,34 @@ PPH_STRING PhGetUserDefaultLocaleName(
     if (NT_SUCCESS(RtlLcidToLocaleName(PhGetUserDefaultLCID(), &localeNameUs, 0, FALSE)))
     {
         return PhCreateStringFromUnicodeString(&localeNameUs);
+    }
+
+    return NULL;
+}
+
+// rev from LCIDToLocaleName
+PPH_STRING PhLCIDToLocaleName(
+    _In_ LCID lcid
+    )
+{
+    UNICODE_STRING localeNameUs;
+    WCHAR localeName[LOCALE_NAME_MAX_LENGTH];
+
+    RtlInitEmptyUnicodeString(&localeNameUs, localeName, sizeof(localeName));
+
+    if (lcid)
+    {
+        if (NT_SUCCESS(RtlLcidToLocaleName(lcid, &localeNameUs, 0, FALSE)))
+        {
+            return PhCreateStringFromUnicodeString(&localeNameUs);
+        }
+    }
+    else // Return the current user locale when zero is specified.
+    {
+        if (NT_SUCCESS(RtlLcidToLocaleName(PhGetUserDefaultLCID(), &localeNameUs, 0, FALSE)))
+        {
+            return PhCreateStringFromUnicodeString(&localeNameUs);
+        }
     }
 
     return NULL;
@@ -1519,7 +1556,7 @@ PPH_STRING PhFormatSize(
     // PhFormat handles this better than the old method.
 
     format.Type = SizeFormatType | FormatUseRadix;
-    format.Radix = (UCHAR)(MaxSizeUnit != -1 ? MaxSizeUnit : PhMaxSizeUnit);
+    format.Radix = (UCHAR)(MaxSizeUnit != ULONG_MAX ? MaxSizeUnit : PhMaxSizeUnit);
     format.u.Size = Size;
 
     return PhFormat(&format, 1, 0);
@@ -2083,7 +2120,7 @@ NTSTATUS PhGetFullPathEx(
         else
         {
             // The path points to a directory.
-            *IndexOfFileName = -1;
+            *IndexOfFileName = ULONG_MAX;
         }
     }
 
@@ -2542,20 +2579,20 @@ NTSTATUS PhCreateProcess(
     if (NT_SUCCESS(status))
     {
         if (!(Flags & PH_CREATE_PROCESS_SUSPENDED))
-            NtResumeThread(processInfo.Thread, NULL);
+            NtResumeThread(processInfo.ThreadHandle, NULL);
 
         if (ClientId)
             *ClientId = processInfo.ClientId;
 
         if (ProcessHandle)
-            *ProcessHandle = processInfo.Process;
+            *ProcessHandle = processInfo.ProcessHandle;
         else
-            NtClose(processInfo.Process);
+            NtClose(processInfo.ProcessHandle);
 
         if (ThreadHandle)
-            *ThreadHandle = processInfo.Thread;
+            *ThreadHandle = processInfo.ThreadHandle;
         else
-            NtClose(processInfo.Thread);
+            NtClose(processInfo.ThreadHandle);
     }
 
     return status;
@@ -2606,6 +2643,8 @@ static const PH_FLAG_MAPPING PhpCreateProcessMappings[] =
     { PH_CREATE_PROCESS_SUSPENDED, CREATE_SUSPENDED },
     { PH_CREATE_PROCESS_BREAKAWAY_FROM_JOB, CREATE_BREAKAWAY_FROM_JOB },
     { PH_CREATE_PROCESS_NEW_CONSOLE, CREATE_NEW_CONSOLE },
+    { PH_CREATE_PROCESS_DEBUG, DEBUG_PROCESS },
+    { PH_CREATE_PROCESS_DEBUG_ONLY_THIS_PROCESS, DEBUG_ONLY_THIS_PROCESS },
     { PH_CREATE_PROCESS_EXTENDED_STARTUPINFO, EXTENDED_STARTUPINFO_PRESENT }
 };
 
@@ -2812,7 +2851,11 @@ NTSTATUS PhCreateProcessAsUser(
 
         if (Flags & PH_CREATE_PROCESS_SET_SESSION_ID)
         {
-            if (Information->SessionId != NtCurrentPeb()->SessionId)
+            ULONG sessionId = ULONG_MAX;
+
+            PhGetProcessSessionId(NtCurrentProcess(), &sessionId);
+
+            if (Information->SessionId != sessionId)
                 useWithLogon = FALSE;
         }
 
@@ -3528,7 +3571,7 @@ VOID PhShellOpenKey(
         return;
 
     RtlInitUnicodeString(&valueName, L"LastKey");
-    lastKey = PhExpandKeyName(KeyName, TRUE);
+    lastKey = PhExpandKeyName(KeyName, FALSE);
     NtSetValueKey(regeditKeyHandle, &valueName, 0, REG_SZ, lastKey->Buffer, (ULONG)lastKey->Length + sizeof(UNICODE_NULL));
     PhDereferenceObject(lastKey);
 
@@ -5163,11 +5206,11 @@ PPH_STRING PhCreateCacheFile(
     _In_ PPH_STRING FileName
     )
 {
-    static PH_STRINGREF cacheDirectorySr = PH_STRINGREF_INIT(L"%TEMP%");
+    static PH_STRINGREF cacheDirectorySr = PH_STRINGREF_INIT(L"%APPDATA%\\Process Hacker\\Cache");
     PPH_STRING cacheDirectory;
     PPH_STRING cacheFilePath;
     PPH_STRING cacheFullFilePath = NULL;
-    ULONG indexOfFileName = -1;
+    ULONG indexOfFileName = ULONG_MAX;
     WCHAR alphastring[16] = L"";
 
     cacheDirectory = PhExpandEnvironmentStrings(&cacheDirectorySr);
@@ -5186,7 +5229,7 @@ PPH_STRING PhCreateCacheFile(
     {
         PPH_STRING directoryPath;
 
-        if (indexOfFileName != -1 && (directoryPath = PhSubstring(cacheFullFilePath, 0, indexOfFileName)))
+        if (indexOfFileName != ULONG_MAX && (directoryPath = PhSubstring(cacheFullFilePath, 0, indexOfFileName)))
         {
             PhCreateDirectory(directoryPath);
             PhDereferenceObject(directoryPath);
@@ -5199,13 +5242,27 @@ PPH_STRING PhCreateCacheFile(
     return cacheFullFilePath;
 }
 
+VOID PhClearCacheDirectory(
+    VOID
+    )
+{
+    static PH_STRINGREF cacheDirectorySr = PH_STRINGREF_INIT(L"%APPDATA%\\Process Hacker\\Cache");
+    PPH_STRING cacheDirectory;
+
+    if (cacheDirectory = PhExpandEnvironmentStrings(&cacheDirectorySr))
+    {
+        PhDeleteDirectory(cacheDirectory);
+        PhDereferenceObject(cacheDirectory);
+    }
+}
+
 VOID PhDeleteCacheFile(
     _In_ PPH_STRING FileName
     )
 {
     PPH_STRING cacheDirectory;
     PPH_STRING cacheFullFilePath;
-    ULONG indexOfFileName = -1;
+    ULONG indexOfFileName = ULONG_MAX;
 
     if (RtlDoesFileExists_U(PhGetString(FileName)))
     {
@@ -5214,7 +5271,7 @@ VOID PhDeleteCacheFile(
 
     if (cacheFullFilePath = PhGetFullPath(PhGetString(FileName), &indexOfFileName))
     {
-        if (indexOfFileName != -1 && (cacheDirectory = PhSubstring(cacheFullFilePath, 0, indexOfFileName)))
+        if (indexOfFileName != ULONG_MAX && (cacheDirectory = PhSubstring(cacheFullFilePath, 0, indexOfFileName)))
         {
             PhDeleteDirectory(cacheDirectory);
             PhDereferenceObject(cacheDirectory);
@@ -5288,6 +5345,56 @@ HANDLE PhGetNamespaceHandle(
     }
 
     return directory;
+}
+
+// rev from LdrAccessResource (dmex)
+NTSTATUS PhAccessResource(
+    _In_ PVOID DllBase,
+    _In_ PIMAGE_RESOURCE_DATA_ENTRY ResourceDataEntry,
+    _Out_opt_ PVOID *ResourceBuffer,
+    _Out_opt_ ULONG *ResourceLength
+    )
+{
+    PVOID baseAddress;
+
+    if (LDR_IS_DATAFILE(DllBase))
+        baseAddress = (PVOID)((ULONG_PTR)DllBase & ~1);
+    else if (LDR_IS_IMAGEMAPPING(DllBase))
+        baseAddress = (PVOID)((ULONG_PTR)DllBase & ~2);
+    else
+        baseAddress = DllBase;
+
+    if (ResourceLength)
+    {
+        *ResourceLength = ResourceDataEntry->Size;
+    }
+
+    if (ResourceBuffer)
+    {
+        if (LDR_IS_DATAFILE(DllBase))
+        {
+            NTSTATUS status;
+
+            status = PhLoaderEntryImageRvaToVa(
+                baseAddress,
+                ResourceDataEntry->OffsetToData,
+                ResourceBuffer
+                );
+
+            return status;
+        }
+        else
+        {
+            *ResourceBuffer = PTR_ADD_OFFSET(
+                baseAddress,
+                ResourceDataEntry->OffsetToData
+                );
+
+            return STATUS_SUCCESS;
+        }
+    }
+
+    return STATUS_SUCCESS;
 }
 
 BOOLEAN PhLoadResource(
@@ -5395,7 +5502,7 @@ PPH_STRING PhLoadIndirectString(
             // HACK: Services.exe includes custom logic for indirect Service description strings by reading descriptions from inf files,
             // these strings use the following format: "@FileName.inf,%SectionKeyName%;DefaultString".
             // Return the last token of the service string instead of locating and parsing the inf file with GetPrivateProfileString.
-            if (dllIndexRef.Buffer[0] == L'%' && PhSplitStringRefAtChar(&sourceRef, L';', &dllNameRef, &dllIndexRef))
+            if (PhSplitStringRefAtChar(&sourceRef, L';', &dllNameRef, &dllIndexRef)) // dllIndexRef.Buffer[0] == L'%'
                 return PhCreateString2(&dllIndexRef);
             else
                 return NULL;
@@ -5452,9 +5559,7 @@ BOOLEAN PhExtractIconEx(
 
     if (PhBeginInitOnce(&initOnce))
     {
-        if (!PrivateExtractIconExW)
-            PrivateExtractIconExW = PhGetDllProcedureAddress(L"user32.dll", "PrivateExtractIconExW", 0);
-
+        PrivateExtractIconExW = PhGetDllProcedureAddress(L"user32.dll", "PrivateExtractIconExW", 0);
         PhEndInitOnce(&initOnce);
     }
 
@@ -5740,6 +5845,80 @@ NTSTATUS PhGetLoaderEntryImageSection(
     return STATUS_SECTION_NOT_IMAGE;
 }
 
+NTSTATUS PhLoaderEntryImageRvaToSection(
+    _In_ PIMAGE_NT_HEADERS ImageNtHeader,
+    _In_ ULONG Rva,
+    _Out_ PIMAGE_SECTION_HEADER *ImageSection,
+    _Out_ SIZE_T *ImageSectionLength
+    )
+{
+    SIZE_T directorySectionLength = 0;
+    PIMAGE_SECTION_HEADER sectionHeader;
+    PIMAGE_SECTION_HEADER directorySectionHeader = NULL;
+    ULONG i;
+
+    for (i = 0; i < ImageNtHeader->FileHeader.NumberOfSections; i++)
+    {
+        sectionHeader = PTR_ADD_OFFSET(IMAGE_FIRST_SECTION(ImageNtHeader), sizeof(IMAGE_SECTION_HEADER) * i);
+
+        if (
+            ((ULONG_PTR)Rva >= (ULONG_PTR)sectionHeader->VirtualAddress) &&
+            ((ULONG_PTR)Rva < (ULONG_PTR)PTR_ADD_OFFSET(sectionHeader->VirtualAddress, sectionHeader->SizeOfRawData))
+            )
+        {
+            directorySectionLength = sectionHeader->Misc.VirtualSize;
+            directorySectionHeader = sectionHeader;
+            break;
+        }
+    }
+
+    if (directorySectionHeader && directorySectionLength)
+    {
+        *ImageSection = directorySectionHeader;
+        *ImageSectionLength = directorySectionLength;
+        return STATUS_SUCCESS;
+    }
+
+    return STATUS_SECTION_NOT_IMAGE;
+}
+
+NTSTATUS PhLoaderEntryImageRvaToVa(
+    _In_ PVOID BaseAddress,
+    _In_ ULONG Rva,
+    _Out_ PVOID *Va
+    )
+{
+    NTSTATUS status;
+    SIZE_T imageSectionSize;
+    PIMAGE_SECTION_HEADER imageSection;
+    PIMAGE_NT_HEADERS imageNtHeader;
+
+    status = PhGetLoaderEntryImageNtHeaders(
+        BaseAddress,
+        &imageNtHeader
+        );
+
+    if (!NT_SUCCESS(status))
+        return status;
+
+    status = PhLoaderEntryImageRvaToSection(
+        imageNtHeader,
+        Rva,
+        &imageSection,
+        &imageSectionSize
+        );
+
+    if (!NT_SUCCESS(status))
+        return status;
+
+    *Va = PTR_ADD_OFFSET(BaseAddress, PTR_ADD_OFFSET(
+        PTR_SUB_OFFSET(Rva, imageSection->VirtualAddress),
+        imageSection->PointerToRawData
+        ));
+
+    return STATUS_SUCCESS;
+}
+
 PVOID PhGetLoaderEntryImageExportFunction(
     _In_ PVOID BaseAddress,
     _In_ PIMAGE_NT_HEADERS ImageNtHeader,
@@ -5804,7 +5983,21 @@ PVOID PhGetLoaderEntryImageExportFunction(
 
             if (libraryModule = LoadLibrary(libraryNameString->Buffer))
             {
-                exportAddress = PhGetDllBaseProcedureAddress(libraryModule, libraryFunctionString->Buffer, 0);
+                if (libraryFunctionString->Buffer[0] == L'#') // This is a forwarder RVA with an ordinal import.
+                {
+                    ULONG64 importOrdinal;
+
+                    PhSkipStringRef(&dllProcedureRef, sizeof(WCHAR));
+
+                    if (PhStringToInteger64(&dllProcedureRef, 10, &importOrdinal))
+                        exportAddress = PhGetDllBaseProcedureAddress(libraryModule, NULL, (USHORT)importOrdinal);
+                    else
+                        exportAddress = PhGetDllBaseProcedureAddress(libraryModule, libraryFunctionString->Buffer, 0);
+                }
+                else
+                {
+                    exportAddress = PhGetDllBaseProcedureAddress(libraryModule, libraryFunctionString->Buffer, 0);
+                }
             }
 
             PhDereferenceObject(libraryFunctionString);
@@ -5915,28 +6108,26 @@ static NTSTATUS PhpFixupLoaderEntryImageImports(
 
                 if (!procedureAddress)
                 {
-                    if (PhGetIntegerSetting(L"ShowPluginLoadErrors")) // HACK abstraction violation (dmex)
-                    {
-                        PPH_STRING fileName;
-                        
-                        if (NT_SUCCESS(PhGetProcessMappedFileName(NtCurrentProcess(), BaseAddress, &fileName)))
-                        {
-                            PhMoveReference(&fileName, PhGetFileName(fileName));
-                            PhMoveReference(&fileName, PhGetBaseName(fileName));
-                        
-                            PhShowError(
-                                NULL, 
-                                L"Unable to load plugin.\r\nName: %s\r\nOrdinal: %u\r\nModule: %hs", 
-                                PhGetStringOrEmpty(fileName), 
-                                procedureOrdinal,
-                                importName
-                                );
-                        
-                            PhDereferenceObject(fileName);
-                        }
-                    }
+#ifdef DEBUG
+                    PPH_STRING fileName;
 
-                    status = STATUS_INVALID_PARAMETER;STATUS_ORDINAL_NOT_FOUND;
+                    if (NT_SUCCESS(PhGetProcessMappedFileName(NtCurrentProcess(), BaseAddress, &fileName)))
+                    {
+                        PhMoveReference(&fileName, PhGetFileName(fileName));
+                        PhMoveReference(&fileName, PhGetBaseName(fileName));
+
+                        PhShowError(
+                            NULL,
+                            L"Unable to load plugin.\r\nName: %s\r\nOrdinal: %u\r\nModule: %hs",
+                            PhGetStringOrEmpty(fileName),
+                            procedureOrdinal,
+                            importName
+                            );
+
+                        PhDereferenceObject(fileName);
+                    }
+#endif
+                    status = STATUS_ORDINAL_NOT_FOUND;
                     goto CleanupExit;
                 }
 
@@ -5952,27 +6143,25 @@ static NTSTATUS PhpFixupLoaderEntryImageImports(
 
                 if (!procedureAddress)
                 {
-                    if (PhGetIntegerSetting(L"ShowPluginLoadErrors")) // HACK abstraction violation (dmex)
-                    {
-                        PPH_STRING fileName;
-                        
-                        if (NT_SUCCESS(PhGetProcessMappedFileName(NtCurrentProcess(), BaseAddress, &fileName)))
-                        {
-                            PhMoveReference(&fileName, PhGetFileName(fileName));
-                            PhMoveReference(&fileName, PhGetBaseName(fileName));
-                        
-                            PhShowError(
-                                NULL,
-                                L"Unable to load plugin.\r\nName: %s\r\nFunction: %hs\r\nModule: %hs",
-                                PhGetStringOrEmpty(fileName),
-                                importByName->Name,
-                                importName
-                                );
-                        
-                            PhDereferenceObject(fileName);
-                        }
-                    }
+#ifdef DEBUG
+                    PPH_STRING fileName;
 
+                    if (NT_SUCCESS(PhGetProcessMappedFileName(NtCurrentProcess(), BaseAddress, &fileName)))
+                    {
+                        PhMoveReference(&fileName, PhGetFileName(fileName));
+                        PhMoveReference(&fileName, PhGetBaseName(fileName));
+
+                        PhShowError(
+                            NULL,
+                            L"Unable to load plugin.\r\nName: %s\r\nFunction: %hs\r\nModule: %hs",
+                            PhGetStringOrEmpty(fileName),
+                            importByName->Name,
+                            importName
+                            );
+
+                        PhDereferenceObject(fileName);
+                    }
+#endif
                     status = STATUS_PROCEDURE_NOT_FOUND;
                     goto CleanupExit;
                 }

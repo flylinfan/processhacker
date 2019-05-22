@@ -97,16 +97,16 @@ LRESULT CALLBACK PhpThemeWindowStatusbarWndSubclassProc(
     );
 
 // rev // Win10-RS5 (uxtheme.dll ordinal 132)
-BOOLEAN (WINAPI *ShouldAppsUseDarkMode_I)(
+BOOL (WINAPI *ShouldAppsUseDarkMode_I)(
     VOID
     ) = NULL;
 // rev // Win10-RS5 (uxtheme.dll ordinal 133)
-BOOLEAN (WINAPI *AllowDarkModeForWindow_I)(
+BOOL (WINAPI *AllowDarkModeForWindow_I)(
     _In_ HWND WindowHandle,
     _In_ BOOL Enabled
     ) = NULL;
 // rev // Win10-RS5 (uxtheme.dll ordinal 137)
-BOOLEAN (WINAPI *IsDarkModeAllowedForWindow_I)(
+BOOL (WINAPI *IsDarkModeAllowedForWindow_I)(
     _In_ HWND WindowHandle
     ) = NULL;
 
@@ -192,6 +192,29 @@ VOID PhInitializeWindowTheme(
     {
         EnableThemeDialogTexture(WindowHandle, ETDT_ENABLETAB);
     }
+}
+
+VOID PhInitializeWindowThemeEx(
+    _In_ HWND WindowHandle
+    )
+{
+    static PH_STRINGREF keyPath = PH_STRINGREF_INIT(L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize");
+    HANDLE keyHandle;
+    BOOLEAN enableThemeSupport = FALSE;
+
+    if (NT_SUCCESS(PhOpenKey(
+        &keyHandle,
+        KEY_READ,
+        PH_KEY_CURRENT_USER,
+        &keyPath,
+        0
+        )))
+    {
+        enableThemeSupport = !PhQueryRegistryUlong(keyHandle, L"AppsUseLightTheme");
+        NtClose(keyHandle);
+    }
+
+    PhInitializeWindowTheme(WindowHandle, enableThemeSupport);
 }
 
 VOID PhReInitializeWindowTheme(
@@ -598,6 +621,10 @@ BOOLEAN CALLBACK PhpReInitializeThemeWindowEnumChildWindows(
             break;
         }
     }
+    else if (PhEqualStringZ(windowClassName, L"Edit", FALSE))
+    {
+        SendMessage(WindowHandle, WM_THEMECHANGED, 0, 0); // searchbox.c
+    }
 
     InvalidateRect(WindowHandle, NULL, TRUE);
 
@@ -865,6 +892,37 @@ BOOLEAN PhThemeWindowDrawItem(
 
             return TRUE;
         }
+    case ODT_COMBOBOX:
+        {
+            WCHAR comboText[MAX_PATH];
+
+            switch (PhpThemeColorMode)
+            {
+            case 0: // New colors
+                SetTextColor(DrawInfo->hDC, GetSysColor(COLOR_WINDOWTEXT));
+                SetDCBrushColor(DrawInfo->hDC, RGB(0xff, 0xff, 0xff));
+                break;
+            case 1: // Old colors
+                SetTextColor(DrawInfo->hDC, GetSysColor(COLOR_HIGHLIGHTTEXT));
+                SetDCBrushColor(DrawInfo->hDC, RGB(28, 28, 28));
+                break;
+            }
+
+            FillRect(DrawInfo->hDC, &DrawInfo->rcItem, GetStockObject(DC_BRUSH));
+
+            if (ComboBox_GetLBText(DrawInfo->hwndItem, DrawInfo->itemID, (LPARAM)comboText) != CB_ERR)
+            {
+                DrawText(
+                    DrawInfo->hDC,
+                    comboText,
+                    (UINT)PhCountStringZ(comboText),
+                    &DrawInfo->rcItem,
+                    DT_LEFT | DT_END_ELLIPSIS | DT_SINGLELINE
+                    );
+            }
+            return TRUE;
+        }
+        break;
     }
 
     return FALSE;
@@ -1062,11 +1120,12 @@ LRESULT CALLBACK PhpThemeWindowDrawButton(
             }
             else if ((buttonStyle & BS_CHECKBOX) == BS_CHECKBOX)
             {
-                HFONT newFont = PhDuplicateFontWithNewHeight(PhApplicationFont, 22);
-                oldFont = SelectFont(DrawInfo->hdc, newFont);
-
+      
                 if (Button_GetCheck(DrawInfo->hdr.hwndFrom) == BST_CHECKED)
                 {
+                    HFONT newFont = PhDuplicateFontWithNewHeight(PhApplicationFont, 16);
+
+                    oldFont = SelectFont(DrawInfo->hdc, newFont);
                     DrawText(
                         DrawInfo->hdc,
                         L"\u2611",
@@ -1074,9 +1133,14 @@ LRESULT CALLBACK PhpThemeWindowDrawButton(
                         &DrawInfo->rc,
                         DT_LEFT | DT_SINGLELINE | DT_VCENTER
                         );
+                    SelectFont(DrawInfo->hdc, oldFont);
+                    DeleteFont(newFont);
                 }
                 else
                 {
+                    HFONT newFont = PhDuplicateFontWithNewHeight(PhApplicationFont, 22);
+
+                    oldFont = SelectFont(DrawInfo->hdc, newFont);
                     DrawText(
                         DrawInfo->hdc,
                         L"\u2610",
@@ -1084,10 +1148,9 @@ LRESULT CALLBACK PhpThemeWindowDrawButton(
                         &DrawInfo->rc,
                         DT_LEFT | DT_SINGLELINE | DT_VCENTER
                         );
+                    SelectFont(DrawInfo->hdc, oldFont);
+                    DeleteFont(newFont);
                 }
-
-                SelectFont(DrawInfo->hdc, oldFont);
-                DeleteFont(newFont);
 
                 DrawInfo->rc.left += 10;
                 DrawText(
@@ -1536,6 +1599,7 @@ LRESULT CALLBACK PhpThemeWindowSubclassProc(
     case WM_CTLCOLORBTN:
     case WM_CTLCOLORDLG:
     case WM_CTLCOLORSTATIC:
+    case WM_CTLCOLORLISTBOX:
         {
             SetBkMode((HDC)wParam, TRANSPARENT);
 

@@ -2,7 +2,7 @@
  * Process Hacker -
  *   Appmodel support functions
  *
- * Copyright (C) 2017-2018 dmex
+ * Copyright (C) 2017-2019 dmex
  *
  * This file is part of Process Hacker.
  *
@@ -71,7 +71,35 @@ static BOOL (WINAPI* AppContainerFreeMemory_I)(
 static HRESULT (WINAPI* AppPolicyGetWindowingModel_I)(
     _In_ HANDLE ProcessTokenHandle,
     _Out_ AppPolicyWindowingModel *ProcessWindowingModelPolicy
-    );
+    ) = NULL;
+
+// rev
+static NTSTATUS (NTAPI* PsmGetKeyFromProcess_I)(
+    _In_ HANDLE ProcessHandle,
+    _Out_ PVOID KeyBuffer,
+    _Inout_ PULONG KeyLength
+    ) = NULL;
+
+// rev
+static NTSTATUS (NTAPI* PsmGetKeyFromToken_I)(
+    _In_ HANDLE TokenHandle,
+    _Out_ PVOID KeyBuffer,
+    _Inout_ PULONG KeyLength
+    ) = NULL;
+
+// rev
+static NTSTATUS (NTAPI* PsmGetApplicationNameFromKey_I)(
+    _In_ PVOID KeyBuffer,
+    _Out_ PVOID NameBuffer,
+    _Inout_ PULONG NameLength
+    ) = NULL;
+
+// rev
+static NTSTATUS (NTAPI* PsmGetPackageFullNameFromKey_I)(
+    _In_ PVOID KeyBuffer,
+    _Out_ PVOID NameBuffer,
+    _Inout_ PULONG NameLength
+    ) = NULL;
 
 typedef enum _START_MENU_APP_ITEMS_FLAGS
 {
@@ -494,8 +522,8 @@ DECLARE_INTERFACE_IID(IResourceMap, IUnknown)
     ((This)->lpVtbl->GetNamedResourceCount(This, Count)) 
 #define IResourceMap_GetNamedResourceUri(This, Index, Name) \
     ((This)->lpVtbl->GetNamedResourceUri(This, Index, Name)) 
-#define IResourceMap_GetNamedResource(This) \
-    ((This)->lpVtbl->GetNamedResource(This)) 
+#define IResourceMap_GetNamedResource(This, Name, rrid, ppvObject) \
+    ((This)->lpVtbl->GetNamedResource(This, Name, rrid, ppvObject))
 #define IResourceMap_GetFullyQualifiedReference(This) \
     ((This)->lpVtbl->GetFullyQualifiedReference(This)) 
 #define IResourceMap_GetFilePathByUri(This) \

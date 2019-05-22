@@ -1759,7 +1759,7 @@ BOOLEAN PhMwpOnNotify(
             PPH_STRING fullFileName;
             PPH_STRING argumentsString;
 
-            PhInitializeStringRefLongHint(&string, (PWSTR)runFileDlg->lpszFile);
+            PhInitializeStringRefLongHint(&string, runFileDlg->lpszFile);
             PhParseCommandLineFuzzy(&string, &fileName, &arguments, &fullFileName);
 
             if (!fullFileName)
@@ -1767,8 +1767,15 @@ BOOLEAN PhMwpOnNotify(
 
             argumentsString = PhCreateString2(&arguments);
 
-            if (PhShellExecuteEx(PhMainWndHandle, fullFileName->Buffer, argumentsString->Buffer,
-                runFileDlg->nShow, PH_SHELL_EXECUTE_ADMIN, 0, NULL))
+            if (PhShellExecuteEx(
+                PhMainWndHandle,
+                fullFileName->Buffer,
+                argumentsString->Buffer,
+                runFileDlg->ShowCmd,
+                PH_SHELL_EXECUTE_ADMIN,
+                0,
+                NULL
+                ))
             {
                 *Result = RF_CANCEL;
             }
@@ -1802,7 +1809,7 @@ BOOLEAN PhMwpOnNotify(
                 {
                     status = PhCreateProcessWin32(
                         NULL,
-                        (PWSTR)runFileDlg->lpszFile,
+                        runFileDlg->lpszFile,
                         NULL,
                         NULL,
                         0,
@@ -2160,21 +2167,6 @@ ULONG_PTR PhMwpOnUserMessage(
             PhMwpActivateWindow(!!PhGetIntegerSetting(L"IconTogglesVisibility"));
         }
         break;
-    case WM_PH_PROCESSES_UPDATED:
-        {
-            PhMwpOnProcessesUpdated((ULONG)WParam);
-        }
-        break;
-    case WM_PH_SERVICES_UPDATED:
-        {
-            PhMwpOnServicesUpdated((ULONG)WParam);
-        }
-        break;
-    case WM_PH_NETWORK_ITEMS_UPDATED:
-        {
-            PhMwpOnNetworkItemsUpdated((ULONG)WParam);
-        }
-        break;
     }
 
     return 0;
@@ -2198,6 +2190,7 @@ VOID PhMwpLoadSettings(
     PhEnableServiceQueryStage2 = !!PhGetIntegerSetting(L"EnableServiceStage2");
     PhEnableThemeSupport = !!PhGetIntegerSetting(L"EnableThemeSupport");
     PhEnableTooltipSupport = !!PhGetIntegerSetting(L"EnableTooltipSupport");
+    PhEnableLinuxSubsystemSupport = !!PhGetIntegerSetting(L"EnableLinuxSubsystemSupport");
     PhMwpNotifyIconNotifyMask = PhGetIntegerSetting(L"IconNotifyMask");
     
     if (PhGetIntegerSetting(L"MainWindowAlwaysOnTop"))
@@ -3301,7 +3294,7 @@ VOID PhShowIconNotification(
     _In_ ULONG Flags
     )
 {
-    PhNfShowBalloonTip(0, Title, Text, 10, Flags);
+    PhNfShowBalloonTip(Title, Text, 10, Flags);
 }
 
 VOID PhShowDetailsForIconNotification(

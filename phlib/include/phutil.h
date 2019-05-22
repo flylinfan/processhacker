@@ -690,7 +690,9 @@ typedef struct _PH_CREATE_PROCESS_INFO
 #define PH_CREATE_PROCESS_SUSPENDED 0x4
 #define PH_CREATE_PROCESS_BREAKAWAY_FROM_JOB 0x8
 #define PH_CREATE_PROCESS_NEW_CONSOLE 0x10
-#define PH_CREATE_PROCESS_EXTENDED_STARTUPINFO 0x20
+#define PH_CREATE_PROCESS_DEBUG 0x20
+#define PH_CREATE_PROCESS_DEBUG_ONLY_THIS_PROCESS 0x40
+#define PH_CREATE_PROCESS_EXTENDED_STARTUPINFO 0x80
 
 PHLIBAPI
 NTSTATUS
@@ -1123,6 +1125,13 @@ PhCreateCacheFile(
 PHLIBAPI
 VOID
 NTAPI
+PhClearCacheDirectory(
+    VOID
+    );
+
+PHLIBAPI
+VOID
+NTAPI
 PhDeleteCacheFile(
     _In_ PPH_STRING FileName
     );
@@ -1234,6 +1243,25 @@ PhGetLoaderEntryImageSection(
     _In_ PVOID ImageDirectory,
     _Out_ PIMAGE_SECTION_HEADER *ImageSection,
     _Out_ SIZE_T *ImageSectionLength
+    );
+
+PHLIBAPI
+NTSTATUS
+NTAPI
+PhLoaderEntryImageRvaToSection(
+    _In_ PIMAGE_NT_HEADERS ImageNtHeader,
+    _In_ ULONG Rva,
+    _Out_ PIMAGE_SECTION_HEADER *ImageSection,
+    _Out_ SIZE_T *ImageSectionLength
+    );
+
+PHLIBAPI
+NTSTATUS
+NTAPI
+PhLoaderEntryImageRvaToVa(
+    _In_ PVOID BaseAddress,
+    _In_ ULONG Rva,
+    _Out_ PVOID *Va
     );
 
 PHLIBAPI

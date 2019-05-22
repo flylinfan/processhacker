@@ -157,7 +157,7 @@ VOID NTAPI ProcessesUpdatedCallback(
     _In_opt_ PVOID Context
     )
 {
-    if (ProcessesUpdatedCount < 2)
+    if (ProcessesUpdatedCount <= 2)
     {
         ProcessesUpdatedCount++;
         return;
@@ -205,8 +205,8 @@ VOID NTAPI ProcessMenuInitializingCallback(
 
     if (miscMenu)
     {
-        PhInsertEMenuItem(miscMenu, PhPluginCreateEMenuItem(PluginInstance, flags, ID_PROCESS_UNLOADEDMODULES, L"&Unloaded modules", processItem), -1);
-        PhInsertEMenuItem(miscMenu, PhPluginCreateEMenuItem(PluginInstance, flags, ID_PROCESS_WSWATCH, L"&WS watch", processItem), -1);
+        PhInsertEMenuItem(miscMenu, PhPluginCreateEMenuItem(PluginInstance, flags, ID_PROCESS_UNLOADEDMODULES, L"&Unloaded modules", processItem), ULONG_MAX);
+        PhInsertEMenuItem(miscMenu, PhPluginCreateEMenuItem(PluginInstance, flags, ID_PROCESS_WSWATCH, L"&WS watch", processItem), ULONG_MAX);
     }
 }
 
@@ -330,6 +330,7 @@ VOID NTAPI TrayIconsInitializingCallback(
     _In_opt_ PVOID Context
     )
 {
+    EtLoadTrayIconGuids();
     EtRegisterNotifyIcons(Parameter);
 }
 
@@ -423,11 +424,7 @@ VOID EtDeleteProcessBlock(
     _In_ PET_PROCESS_BLOCK Block
     )
 {
-    ULONG i;
-
-    EtProcIconNotifyProcessDelete(Block);
-
-    for (i = 1; i <= ETPRTNC_MAXIMUM; i++)
+    for (ULONG i = 1; i <= ETPRTNC_MAXIMUM; i++)
     {
         PhClearReference(&Block->TextCache[i]);
     }
@@ -450,9 +447,7 @@ VOID EtDeleteNetworkBlock(
     _In_ PET_NETWORK_BLOCK Block
     )
 {
-    ULONG i;
-
-    for (i = 1; i <= ETNETNC_MAXIMUM; i++)
+    for (ULONG i = 1; i <= ETNETNC_MAXIMUM; i++)
     {
         PhClearReference(&Block->TextCache[i]);
     }
@@ -527,6 +522,7 @@ LOGICAL DllMain(
                 { IntegerPairSettingType, SETTING_NAME_WSWATCH_WINDOW_POSITION, L"0,0" },
                 { ScalableIntegerPairSettingType, SETTING_NAME_WSWATCH_WINDOW_SIZE, L"@96|325,266" },
                 { StringSettingType, SETTING_NAME_WSWATCH_COLUMNS, L"" },
+                { StringSettingType, SETTING_NAME_TRAYICON_GUIDS, L"" },
             };
 
             PluginInstance = PhRegisterPlugin(PLUGIN_NAME, Instance, &info);

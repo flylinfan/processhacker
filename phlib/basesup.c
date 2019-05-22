@@ -201,6 +201,7 @@ NTSTATUS PhpBaseThreadStart(
     result = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
 
     // Call the user-supplied function.
+
     status = context.StartAddress(context.Parameter);
 
     // De-initialization code
@@ -254,7 +255,8 @@ HANDLE PhCreateThread(
     // NOTE: PhCreateThread previously used CreateThread with callers using GetLastError()
     // for checking errors. We need to preserve this behavior for compatibility -dmex
     // TODO: Migrate code over to PhCreateThreadEx and remove this function.
-    RtlSetLastWin32ErrorAndNtStatusFromNtStatus(status);
+    //RtlSetLastWin32ErrorAndNtStatusFromNtStatus(status);
+    SetLastError(RtlNtStatusToDosError(status));
 
     if (NT_SUCCESS(status))
     {
@@ -700,7 +702,7 @@ PWSTR PhDuplicateStringZ(
     PWSTR newString;
     SIZE_T length;
 
-    length = (PhCountStringZ(String) + sizeof(UNICODE_NULL)) * sizeof(WCHAR); // include the null terminator
+    length = PhCountStringZ(String) * sizeof(WCHAR) + sizeof(UNICODE_NULL); // include the null terminator
 
     newString = PhAllocate(length);
     memcpy(newString, String, length);
@@ -4311,7 +4313,7 @@ ULONG PhFindItemList(
             return i;
     }
 
-    return -1;
+    return ULONG_MAX;
 }
 
 /**
@@ -4733,7 +4735,7 @@ VOID PhpResizeHashtable(
 
     for (i = 0; i < Hashtable->NextEntry; i++)
     {
-        if (entry->HashCode != -1)
+        if (entry->HashCode != ULONG_MAX)
         {
             ULONG index = PhpIndexFromHash(Hashtable, entry->HashCode);
 
@@ -4764,7 +4766,7 @@ FORCEINLINE PVOID PhpAddEntryHashtable(
     {
         ULONG i;
 
-        for (i = Hashtable->Buckets[index]; i != -1; i = entry->Next)
+        for (i = Hashtable->Buckets[index]; i != ULONG_MAX; i = entry->Next)
         {
             entry = PH_HASHTABLE_GET_ENTRY(Hashtable, i);
 
@@ -4779,7 +4781,7 @@ FORCEINLINE PVOID PhpAddEntryHashtable(
     }
 
     // Use a free entry if possible.
-    if (Hashtable->FreeEntry != -1)
+    if (Hashtable->FreeEntry != ULONG_MAX)
     {
         freeEntry = Hashtable->FreeEntry;
         entry = PH_HASHTABLE_GET_ENTRY(Hashtable, freeEntry);
@@ -4909,7 +4911,7 @@ BOOLEAN PhEnumHashtable(
 
         (*EnumerationKey)++;
 
-        if (entry->HashCode != -1)
+        if (entry->HashCode != ULONG_MAX)
         {
             *Entry = &entry->Body;
             return TRUE;
@@ -4944,7 +4946,7 @@ PVOID PhFindEntryHashtable(
     hashCode = PhpValidateHash(Hashtable->HashFunction(Entry));
     index = PhpIndexFromHash(Hashtable, hashCode);
 
-    for (i = Hashtable->Buckets[index]; i != -1; i = entry->Next)
+    for (i = Hashtable->Buckets[index]; i != ULONG_MAX; i = entry->Next)
     {
         entry = PH_HASHTABLE_GET_ENTRY(Hashtable, i);
 
@@ -4981,16 +4983,16 @@ BOOLEAN PhRemoveEntryHashtable(
 
     hashCode = PhpValidateHash(Hashtable->HashFunction(Entry));
     index = PhpIndexFromHash(Hashtable, hashCode);
-    previousIndex = -1;
+    previousIndex = ULONG_MAX;
 
-    for (i = Hashtable->Buckets[index]; i != -1; i = entry->Next)
+    for (i = Hashtable->Buckets[index]; i != ULONG_MAX; i = entry->Next)
     {
         entry = PH_HASHTABLE_GET_ENTRY(Hashtable, i);
 
         if (entry->HashCode == hashCode && Hashtable->EqualFunction(&entry->Body, Entry))
         {
             // Unlink the entry from the bucket.
-            if (previousIndex == -1)
+            if (previousIndex == ULONG_MAX)
             {
                 Hashtable->Buckets[index] = entry->Next;
             }
@@ -4999,7 +5001,7 @@ BOOLEAN PhRemoveEntryHashtable(
                 PH_HASHTABLE_GET_ENTRY(Hashtable, previousIndex)->Next = entry->Next;
             }
 
-            entry->HashCode = -1; // indicates the entry is not being used
+            entry->HashCode = ULONG_MAX; // indicates the entry is not being used
             entry->Next = Hashtable->FreeEntry;
             Hashtable->FreeEntry = i;
 
@@ -5905,9 +5907,10 @@ VOID PhPrintTimeSpan(
     switch (Mode)
     {
     case PH_TIMESPAN_HMSM:
-        _snwprintf(
+        _snwprintf_s(
             Destination,
             PH_TIMESPAN_STR_LEN,
+            _TRUNCATE,
             L"%02I64u:%02I64u:%02I64u.%03I64u",
             PH_TICKS_PARTIAL_HOURS(Ticks),
             PH_TICKS_PARTIAL_MIN(Ticks),
@@ -5916,9 +5919,10 @@ VOID PhPrintTimeSpan(
             );
         break;
     case PH_TIMESPAN_DHMS:
-        _snwprintf(
+        _snwprintf_s(
             Destination,
             PH_TIMESPAN_STR_LEN,
+            _TRUNCATE,
             L"%I64u:%02I64u:%02I64u:%02I64u",
             PH_TICKS_PARTIAL_DAYS(Ticks),
             PH_TICKS_PARTIAL_HOURS(Ticks),
@@ -5927,9 +5931,10 @@ VOID PhPrintTimeSpan(
             );
         break;
     default:
-        _snwprintf(
+        _snwprintf_s(
             Destination,
             PH_TIMESPAN_STR_LEN,
+            _TRUNCATE,
             L"%02I64u:%02I64u:%02I64u",
             PH_TICKS_PARTIAL_HOURS(Ticks),
             PH_TICKS_PARTIAL_MIN(Ticks),
